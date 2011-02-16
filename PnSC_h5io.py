@@ -3,7 +3,9 @@ import matplotlib.cm as cm
 import numpy
 import h5py
 import os, os.path, time, copy, operator
-from PnSC_ui import *
+import PnSC_ui
+#from PnSC_ui import *
+#from PnSC_SCui import *
 #from PnSC_dataimport import *
 #from PnSC_math import *
 
@@ -87,21 +89,38 @@ def getcalanalysis(h5pf, h5expname):
 
 def dt_h5(h5path, h5expname, h5hpname):
     h5file=h5py.File(h5path, mode='r')
-    h5hp=h5file['Calorimetry'][h5expname]['measurement']['HeatProgram']
+    h5hp=h5file['Calorimetry'][h5expname]['measurement']['HeatProgram'][h5hpname]
     dt=1./h5hp.attrs['daqHz']
     h5file.close()
     return dt
 
-def gethpgroup(h5pf, h5expname, h5hpname):
+def gethpgroup(h5pf, h5expname, h5hpname=None):
     if isinstance(h5pf, str):
         h5file=h5py.File(h5pf, mode='r')
     else:
         h5file=h5pf
     h5hp=h5file['Calorimetry'][h5expname]['measurement']['HeatProgram']
+    if not h5hpname is None:
+        h5hp=h5hp[h5hpname]
     if isinstance(h5pf, str):
-        return h5file, h5hp[h5hpname]
-    return h5hp[h5hpname]
-    
+        return h5file, h5hp
+    return h5hp
+
+def experimenthppaths(h5pf, h5expname):
+    if isinstance(h5pf, str):
+        h5file=h5py.File(h5pf, mode='r')
+    else:
+        h5file=h5pf
+    p=[]
+    h5hp=gethpgroup(h5file, h5expname)
+    for pnt in h5hp.values():
+        if isinstance(pnt, h5py.Group):
+            p+=[pnt.name]
+    if isinstance(h5pf, str):
+        return h5file, p
+    return p
+
+
 def msarr_hpgrp(h5hpgrp, twod=False):
     for pnt in h5hpgrp.values():
         if isinstance(pnt, h5py.Dataset):
@@ -112,22 +131,27 @@ def msarr_hpgrp(h5hpgrp, twod=False):
     if twod:
         ms=numpy.float32([ms]*arrshape[0])
     return numpy.float32(ms)
-    
+
+def segtypes():
+    return ['step', 'soak', 'ramp', 'zero']
 def CreateHeatProgSegDictList(h5path, h5expname, h5hpname, critms_step=1., critmAperms_constmA=0.0005, critmA_zero=0.05):
 #the segment types are step, soak, ramp, zero
 #the CreateHeatProgSegDictList function reads the data from the .h5 file and organizes in a way that will be useful for many types of analysis. 
-#the function returns a list where there is one element for each segment in the heat program
+#the function returns a list where there is one dict for each segment in the heat program. Each dict value that is an array is assumed to be data and all have the same shape
     h5file, h5hpgrp=gethpgroup(h5path, h5expname, h5hpname)
     ms=msarr_hpgrp(h5hpgrp, twod=True)
     segms=h5hpgrp.attrs['segment_ms'][:]
     segmA=h5hpgrp.attrs['segment_mA'][:]
     dlist=[]
     def indgen(t, ms1d=ms[0]):
-        return numpy.where(ms1d<=t)[0][-1]
+        ind=numpy.where(ms1d<=t)[0][-1]
+        if ind==len(ms1d)-1:
+            ind=len(ms1d)
+        return ind
     for count, (ms0, ms1, mA0, mA1) in enumerate(zip(segms[:-1], segms[1:], segmA[:-1], segmA[1:])):
         if (ms1-ms0)<=critms_step:
             d={'segmenttype':'step'}
-        elif (mA1-mA0)/(ms1-ms0)<critmAperms_constmA:
+        elif numpy.abs((mA1-mA0)/(ms1-ms0))<critmAperms_constmA:
             if (mA1+mA0)<2.*critmA_zero:
                 d={'segmenttype':'zero'}
             else:
@@ -135,14 +159,24 @@ def CreateHeatProgSegDictList(h5path, h5expname, h5hpname, critms_step=1., critm
         else:
             d={'segmenttype':'ramp'}
             d['ramprate']=(mA1-mA0)/(ms1-ms0)
-        for pnt in h5hpgrp.values():
+        iterpts=h5hpgrp.values()
+        h5an=getcalanalysis(h5file, h5expname)
+        #print h5hpname, h5hpname in h5an
+        if h5hpname in h5an:
+            iterpts+=h5an[h5hpname].values()
+            #print h5an[h5hpname].items()
+        for pnt in iterpts:
             if isinstance(pnt, h5py.Dataset):
                 nam=pnt.name.rpartition('/')[2]
-                d[nam]=pnt[:, :][:, indgen(ms0):indgen(ms1)]
+                arr=pnt[:, :][:, indgen(ms0):indgen(ms1)]
+                #print nam, arr.shape, numpy.isnan(arr).sum()
+                if numpy.any(numpy.isnan(arr)):
+                    continue
+                d[nam]=arr
                 for key, val in pnt.attrs.iteritems():
                     if 'unit' in key:
                         d[nam]*=val
-        d['ms']=ms[:, indgen(ms0):indgen(ms1)]
+        d['cycletime']=ms[:, indgen(ms0):indgen(ms1)]/1000.
         d['segment_ms']=(ms0, ms1)
         d['segment_mA']=(mA0, mA1)
         d['segment_inds']=(indgen(ms0), indgen(ms1))
@@ -150,6 +184,29 @@ def CreateHeatProgSegDictList(h5path, h5expname, h5hpname, critms_step=1., critm
         dlist+=[copy.deepcopy(d)]
     h5hpgrp.file.close()
     return dlist
+
+def piecetogethersegments(arrlist):
+    cycles=arrlist[0].shape[0]
+    return numpy.array([numpy.concatenate([arr[c] for arr in arrlist]) for c in range(cycles)], dtype=arrlist[0].dtype)
+    
+def saveSCcalculations(h5path, h5expname, h5hpname, hpsegdlist):
+    h5file=h5py.File(h5path, mode='r+')
+    h5an=getcalanalysis(h5file, h5expname)
+    h5hp=gethpgroup(h5file, h5expname)
+    if h5hpname in h5an:
+        h5g=h5an[h5hpname]
+    else:
+        h5g=h5an.create_group(h5hpname)
+
+    savekeys=set([k for d in hpsegdlist for k in d.keys() if not ('~' in k or k in h5hp[h5hpname] or k=='cycletime') and isinstance(d[k], numpy.ndarray) and d[k].shape==d['cycletime'].shape])
+    nansegs=[numpy.ones(d['cycletime'].shape, dtype=d['cycletime'].dtype)*numpy.nan for d in hpsegdlist]
+    mastershape=piecetogethersegments([d['cycletime'] for d in hpsegdlist]).shape
+    for k in list(savekeys):
+        savearr=piecetogethersegments([(k in d.keys() and (d[k],) or (ns,))[0] for d, ns in zip(hpsegdlist, nansegs)])
+        if k in h5g:
+            del h5g[k]
+        h5g.create_dataset(k, data=savearr)
+    h5file.close()
 
 def writecellres(h5path, h5expname, h5hpname, R):
     h5file=h5py.File(h5path, mode='r+')
@@ -180,42 +237,8 @@ def experimentgrppaths(h5pf):
     if isinstance(h5pf, str):
         return h5file, p
     return p
-    
-def rescalpath_getorassign(h5pf, h5expname, parent=None, forceassign=False, title='select the experiment whose R(T) calibration will be used'):
-    openclose=isinstance(h5pf, str)
-    if openclose:
-        h5file=h5py.File(h5pf, mode='r')
-    else:
-        h5file=h5pf
-    if forceassign or not ('Res_TempCalPath' in h5file['Calorimetry'][h5expname].attrs.keys()):
-        if parent is None:
-            print 'Need to ask user for the Res Cal experiment group but UI parent not specified'
-            return False
-        p=experimentgrppaths(h5file)
-        expname=[n.strip('/').rpartition('/')[2] for n in p if 'Res_TempCal' in getcalanalysis(h5file, n.strip('/').rpartition('/')[2])]
-        if openclose:
-            h5file.close()
-        idialog=selectorDialog(parent, expname, title=title)#map(operator.itemgetter(1), pathname)
-        if idialog.exec_():
-            expname=expname[idialog.index]
-            reopen=(not openclose) and h5file.mode=='r'
-            if openclose or reopen:
-                h5file.close()#this is an extra close for openclose
-                h5file=h5py.File(h5path, mode='r+')
-            path=getcalanalysis(h5file, expname)['Res_TempCal'].name
-            h5file['Calorimetry'][h5expname].attrs['Res_TempCalPath']=path
-            if openclose or reopen:
-                h5file.close()
-            if reopen:
-                print 'in rescalpath_getorassign,  file reference was passed but needed to close and there is not a way to reopen'
-            return path
-        else:
-            return False
-    else:
-        path=h5file['Calorimetry'][h5expname].attrs['Res_TempCalPath']
-        if openclose:
-            h5file.close()
-        return path
+
+
 #
 #h5path=os.path.join(os.getcwd(), 'TestImport.h5')
 #h5expname='experiment1'
@@ -271,14 +294,20 @@ def tempvsms_heatprogram(h5path, h5expname, h5hpname, segind=None):
     AddRes_CreateHeatProgSegDictList(hpsegdlist)
     AddTemp_CreateHeatProgSegDictList(hpsegdlist, RoToAl)
     print 'tempdone'
-    return numpy.concatenate([d['ms'] for d in hpsegdlist], axis=1), numpy.concatenate([d['sampletemperature'] for d in hpsegdlist], axis=1)
+    return numpy.concatenate([d['cycletime'] for d in hpsegdlist], axis=1), numpy.concatenate([d['sampletemperature'] for d in hpsegdlist], axis=1)
 
-def getfiltergrp(h5pf, h5expname):
+def getfiltergrp(h5pf, h5expname):#will only create is passed 'r+'
     if isinstance(h5pf, str):
         h5file=h5py.File(h5pf, mode='r')
     else:
         h5file=h5pf
-    h5filter=h5file['Calorimetry'][h5expname]['analysis']['filter']
+    h5an=getcalanalysis(h5file, h5expname)
+    if 'filter' in h5an:
+        h5filter=h5an['filter']
+    elif h5file.mode=='r':
+        return False
+    else:
+        h5filter=h5an.create_group('filter')
     if isinstance(h5pf, str):
         return h5file, h5filter
     return h5filter
@@ -291,39 +320,57 @@ def getfilter(h5pf, h5expname, filtername):
     h5filter=h5file['Calorimetry'][h5expname]['analysis']['filter']
     d={}
     for k, v in h5filter[filtername].attrs.iteritems():
-        d[k]=v
+        d[k]=(v=='None' and (None,) or (v,))[0]
     if isinstance(h5pf, str):
         return h5file, d
     return d
 
+def getfilterdict(h5pf, h5expname):
+    if isinstance(h5pf, str):
+        h5file=h5py.File(h5pf, mode='r')
+    else:
+        h5file=h5pf
+    h5filter=getfiltergrp(h5file, h5expname)
+    if not h5filter:
+        h5file.close()
+        return False
+    filterd={}
+    for pnt in h5filter.values():
+        d={}
+        nam=pnt.name.rpartition('/')[2]
+        for k, v in pnt.attrs.iteritems():
+            d[k]=(v=='None' and (None,) or (v,))[0]
+        filterd[nam]=d
+    if isinstance(h5pf, str):
+        return h5file, filterd
+    return filterd
 
 def getSCrecipegrp(h5pf, h5expname):#will create the grp only if pass an r+file
     if isinstance(h5pf, str):
         h5file=h5py.File(h5pf, mode='r')
     else:
         h5file=h5pf
-    if (not 'filter' in h5file['Calorimetry'][h5expname]['analysis']) and h5file.mode=='r+':
-        h5hp=h5file['Calorimetry'][h5expname]['analysis'].create_group('SCrecipe')
+    h5an=getcalanalysis(h5file, h5expname)
+    if (not 'SCrecipe' in h5an) and h5file.mode=='r+':
+        h5hp=h5an.create_group('SCrecipe')
     else:
-        h5hp=h5file['Calorimetry'][h5expname]['analysis']['SCrecipe']
+        h5hp=h5an['SCrecipe']
     if isinstance(h5pf, str):
         return h5file, h5hp
     return h5hp
     
-def savefilters(h5pf, h5expname, filterdlist):
+def savefilters(h5pf, h5expname, filterd):
     if isinstance(h5pf, str):
         h5file=h5py.File(h5pf, mode='r+')
     else:
         h5file=h5pf
     h5filter=getfiltergrp(h5file, h5expname)
-    for d in filterdlist:
-        if d['name'] in h5filter:
-            del h5filter[d['name']]
-        h5g=h5filter.create_group(d['name'])
-        for k, v in d:
-            if k=='name':
-                continue
-            h5g.attrs[k]=v
+    for nam, d in filterd.iteritems():
+        if nam in h5filter:
+            del h5filter[nam]
+        h5g=h5filter.create_group(nam)
+        for k, v in d.iteritems():
+            h5g.attrs[k]=(v is None and ('None',) or (v,))[0]
     if isinstance(h5pf, str):
         h5file.close()
 
@@ -333,14 +380,14 @@ def saveSCrecipe(h5pf, h5expname, recname, fcns, recdlist):
     else:
         h5file=h5pf
     h5rec=getSCrecipegrp(h5file, h5expname)
-    if recname in h5recg:
+    if recname in h5rec:
         del h5rec[recname]
     h5rg=h5rec.create_group(recname)
     h5rg.attrs['fcns']=fcns
     for f, d in zip(fcns, recdlist):
         h5g=h5rg.create_group(f)
-        for k, v in d:
-            h5g.attrs[k]=v
+        for k, v in d.iteritems():
+            h5g.attrs[k]=(v is None and ('None',) or (v,))[0]
     if isinstance(h5pf, str):
         h5file.close()
 
@@ -353,22 +400,79 @@ def getSCrecipe(h5pf, h5expname, recname):
     h5filter=getfiltergrp(h5file, h5expname)
     h5rg=h5rec[recname]
     fcns=h5rg.attrs['fcns']
-    f_saven_segdns_partups_postfd=[]
+    f_saven_namsegkfilk_postfilk=[]
     for f in fcns:
-        fspp=tuple([])
-        attrs=h5g[f].attrs
-        fspp+=(eval(f),)
-        fspp+=(attrs['savename'],)
-        fspp+=(attrs['segkeys'],)
-        fspp+=([('filterdict_'+nam, getfilter(filter)) for nam, filter in zip(attr['parnames'], attr['filters'])],)
-        fspp+=(getfilter(attr['postfilter']),)
-        f_saven_segdns_partups_postfd+=[fspp]
+        t=tuple([])
+        attrs=h5rg[f].attrs
+        t+=(f,)
+        t+=(attrs['savename'],)
+        t+=([(nam, (segk, filter)) for nam, segk, filter in zip(attrs['parnames'], attrs['segdkeys'], attrs['filters'])],)
+        t+=(attrs['postfilter'],)
+        f_saven_namsegkfilk_postfilk+=[t]
 
     if isinstance(h5pf, str):
-        return h5file, f_saven_segdns_partups_postfd
-    return f_saven_segdns_partups_postfd
+        return h5file, f_saven_namsegkfilk_postfilk
+    return f_saven_namsegkfilk_postfilk
 
-
+def copySCrecipes(h5path, h5expname, h5expsource):
+    h5file=h5py.File(h5path, mode='r+')
+    h5srcrec=getSCrecipegrp(h5file, h5expsource)
+    h5desrec=getSCrecipegrp(h5file, h5expname)
+    filters=[]
+    for pnt in h5srcrec.itervalues():
+        if isinstance(pnt, h5py.Group):
+            nam=pnt.name.rpartition('/')[2]
+            if nam in h5desrec:
+                del h5desrec[nam]
+            h5file.copy(pnt, h5desrec)
+            filters+=[fl for pnt2 in pnt.itervalues() if isinstance(pnt2, h5py.Group) and 'filters' in pnt2.attrs.keys() for fl in pnt2.attrs['filters']]
+            filters+=[pnt2.attrs['postfilter'] for pnt2 in pnt.itervalues() if isinstance(pnt2, h5py.Group) and 'postfilter' in pnt2.attrs.keys()]
+    
+    filters=list(set(filters))
+    h5srcfil=getfiltergrp(h5file, h5expsource)
+    h5desfil=getfiltergrp(h5file, h5expname)
+    for nam in filters:
+        if nam in h5desfil:
+            del h5desfil[nam]
+        h5file.copy(h5srcfil[nam], h5desfil)
+    h5file.close()
+    
+def rescalpath_getorassign(h5pf, h5expname, parent=None, forceassign=False, title='select the experiment whose R(T) calibration will be used'):
+    openclose=isinstance(h5pf, str)
+    if openclose:
+        h5file=h5py.File(h5pf, mode='r')
+    else:
+        h5file=h5pf
+    if forceassign or not ('Res_TempCalPath' in h5file['Calorimetry'][h5expname].attrs.keys()):
+        if parent is None:
+            print 'Need to ask user for the Res Cal experiment group but UI parent not specified'
+            return False
+        p=experimentgrppaths(h5file)
+        expname=[n.strip('/').rpartition('/')[2] for n in p if 'Res_TempCal' in getcalanalysis(h5file, n.strip('/').rpartition('/')[2])]
+        if openclose:
+            h5file.close()
+        idialog=PnSC_ui.selectorDialog(parent, expname, title=title)#map(operator.itemgetter(1), pathname)
+        if idialog.exec_():
+            expname=expname[idialog.index]
+            reopen=(not openclose) and h5file.mode=='r'
+            if openclose or reopen:
+                h5file.close()#this is an extra close for openclose
+                h5file=h5py.File(h5pf, mode='r+')
+            path=getcalanalysis(h5file, expname)['Res_TempCal'].name
+            h5file['Calorimetry'][h5expname].attrs['Res_TempCalPath']=path
+            if openclose or reopen:
+                h5file.close()
+            if reopen:
+                print 'in rescalpath_getorassign,  file reference was passed but needed to close and there is not a way to reopen'
+            return path
+        else:
+            return False
+    else:
+        path=h5file['Calorimetry'][h5expname].attrs['Res_TempCalPath']
+        if openclose:
+            h5file.close()
+        return path
+        
 heatprogrammetadatafcns={\
 'Cell Temperature':tempvsms_heatprogram, \
 }#each must take h5path, h5expname, h5hpname as arguments

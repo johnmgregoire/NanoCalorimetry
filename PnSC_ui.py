@@ -16,6 +16,7 @@ import matplotlib.cm as cm
 import matplotlib.mlab as mlab
 import pylab
 from PnSC_math import *
+from PnSC_h5io import *
 
 
 def mygetopenfile(parent=None, xpath="%s" % os.getcwd(),markstr='', filename='' ):
@@ -155,7 +156,8 @@ class plotwidget(FigureCanvas):
         #self.parent=parent
         FigureCanvas.setSizePolicy(self, QSizePolicy.Expanding, QSizePolicy.Expanding)
         FigureCanvas.updateGeometry(self)
-        NavigationToolbar(self, parent)
+        #NavigationToolbar(self, parent)
+        NavigationToolbar(self, self)
         
 class attreditorDialog(QDialog):
     def __init__(self, parent, attrd, arr=None, title=''):
@@ -188,6 +190,7 @@ class attreditorDialog(QDialog):
         self.buttonBox.setOrientation(Qt.Horizontal)
         self.buttonBox.setStandardButtons(QDialogButtonBox.Cancel|QDialogButtonBox.Ok)
         QObject.connect(self.buttonBox, SIGNAL("accepted()"), self.accept)
+        QObject.connect(self.buttonBox, SIGNAL("rejected()"), self.reject)
         mainlayout.addWidget(self.buttonBox, 1, 0)
          
         QObject.connect(self.buttonBox,SIGNAL("accepted()"),self.ExitRoutine)
@@ -317,7 +320,7 @@ class SegmentEditor(QDialog):
         mainlayout.addWidget(self.rowComboBox, 4, pwid+1, 2, 1)
         
         tLabel=QLabel()
-        tLabel.setText('ms')
+        tLabel.setText('cycletime')
         vLabel=QLabel()
         vLabel.setText('mA')
         mainlayout.addWidget(tLabel, nrows_ctrls, pwid, 1, 1)
@@ -395,13 +398,13 @@ class SegmentEditor(QDialog):
         self.cSpinBoxList[-1].setValue(self.dflts[1])
     
     def findsegs(self):#the analysis is done with normalization of the array so it is insensitive to 'Aunit'. Also, the data time interval is not used in the derivative calculation
-        fd_window=self.firstderptsSpinBox.value()
-        sd_window=self.secderptsSpinBox.value()
+        fd_nptsoneside=self.firstderptsSpinBox.value()
+        sd_nptsoneside=self.secderptsSpinBox.value()
         critval_sd=self.secdervalSpinBox.value()
         arr=self.cycledata[1]/self.cycledata[1].max()
 
-        fd=savgolsmooth(arr, window=sd_window, order=3, deriv=1)
-        sd=savgolsmooth(arr, window=fd_window, order=3, deriv=2)
+        fd=savgolsmooth(arr, nptsoneside=sd_nptsoneside, order=3, deriv=1)
+        sd=savgolsmooth(arr, nptsoneside=fd_nptsoneside, order=3, deriv=2)
 
         inds=findlocmax(numpy.abs(sd), critval=critval_sd)
         avelen=10
@@ -717,6 +720,8 @@ class rescalDialog(QDialog):
         self.arrComboBoxlist=[QComboBox() for i in range(3)]
         self.dfltSpinBoxlist=[QDoubleSpinBox() for i in range(3)]
         self.useaveCheckBoxlist=[QCheckBox() for i in range(2)]
+        for sb, n in zip(self.dfltSpinBoxlist, [2, 2, 5]):
+            sb.setDecimals(n)
         for cb, s in zip(self.useaveCheckBoxlist, ['Ro,To', 'dR/dT']):
             cb.setText('Use measured ave of %s \nas value for other cells' %s)
         
@@ -780,7 +785,14 @@ class rescalDialog(QDialog):
         if Rdfltbool:
             savearr[:, 0]=sbvals[0]
             savearr[:, 1]=sbvals[1]
+            names=[p.rpartition('/')[2] for p in experimentgrppaths(self.h5file)]
+            idialog=selectorDialog(self, names, title='Select experiment to save calibration')
+            if not idialog.exec_():
+                self.h5file.close()
+                return
+            grp=getcalanalysis(self.h5file, names[idialog.index])
         else:
+            grp=pnts[0].parent
             savearr[:, 0]=pnts[0][:]
             savearr[:, 1]=pnts[0].attrs['ambient_tempC']
             if self.useaveCheckBoxlist[0].isChecked():
@@ -803,7 +815,7 @@ class rescalDialog(QDialog):
                 inds=numpy.where(savearr[:, 2]<=0.)
                 notinds=numpy.where(savearr[:, 2]>0.)
                 savearr[inds, 2]=numpy.mean(savearr[notinds, 2])
-        grp=pnts[0].parent
+        
         if 'Res_TempCal' in grp:
             del grp['Res_TempCal']
         ds=grp.create_dataset('Res_TempCal', data=savearr)
@@ -840,3 +852,18 @@ class simpleplotDialog(QDialog):
         mainlayout.addWidget(self.buttonBox, 1, 0)
         self.setLayout(mainlayout)
 
+def editattrs(parent, h5path, path):
+    h5file=h5py.File(h5path, mode='r')
+    ad=dict([(k, v) for k, v in h5file[path].attrs.iteritems()])
+    h5file.close()
+    repeat=True
+    edited=True
+    while repeat and edited:
+        idialog=attreditorDialog(parent, ad)
+        repeat=idialog.exec_()
+        edited=idialog.edited
+    if repeat:
+        h5file=h5py.File(h5path, mode='r+')
+        for k, v in ad.iteritems():
+            h5file[path].attrs[k]=v
+        h5file.close()

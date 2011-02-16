@@ -6,6 +6,8 @@ import h5py
 from PnSC_ui import *
 from PnSC_dataimport import *
 from PnSC_SCui import *
+from PnSC_math import *
+from PnSC_h5io import *
 from PyQt4.QtCore import *
 from PyQt4.QtGui import *
 
@@ -103,6 +105,7 @@ class MainMenu(QMainWindow):
         self.action_createh5=MainMenuQAction(self,'action_createh5', 'new h5 file', self.menufileio, [], self.ActionDict)
         self.action_createexpgrp=MainMenuQAction(self,'action_createexpgrp', 'new experiment group', self.menufileio, [('h5open', [True])], self.ActionDict)
         self.action_delexpgrp=MainMenuQAction(self,'action_delexpgrp', 'DELETE experiment group', self.menufileio, [('h5open', [True])], self.ActionDict)
+        self.action_editattrs=MainMenuQAction(self,'action_editattrs', 'Edit import attrs (select a heat program)', self.menufileio, [('h5open', [True]), ('selectiongrouptype', ['heatprogram'])], self.ActionDict)
         
         #setup a menu section
         self.menuplot = QMenu(self.main_menu_pulldown)
@@ -115,6 +118,9 @@ class MainMenu(QMainWindow):
         self.action_plotraw=MainMenuQAction(self,'action_plotraw', 'plot Dataset values (select dataset)', self.menuplot, [('h5open', [True]), ('selectiontype', ['Dataset'])], self.ActionDict)
         self.action_printdata=MainMenuQAction(self,'action_printdata', 'print Dataset values (select dataset or attribute)', self.menuplot, [('h5open', [True]), ('selectiontype', ['Dataset', 'Attr'])], self.ActionDict)
         self.action_plotmetadata=MainMenuQAction(self,'action_plotmetadata', 'Plot Heat Program MetaData(select heat program)', self.menuplot, [('h5open', [True]), ('selectiongrouptype', ['heatprogram'])], self.ActionDict)
+        self.action_getsegd=MainMenuQAction(self,'action_getsegd', 'send SegDict to data (select a heat program)', self.menuplot, [('h5open', [True]), ('selectiongrouptype', ['heatprogram'])], self.ActionDict)
+        self.action_viewSCanalysis=MainMenuQAction(self,'action_viewSCanalysis', 'SC data viewer (select a heat program)', self.menuplot, [('h5open', [True]), ('selectiongrouptype', ['heatprogram'])], self.ActionDict)
+        
         
         #setup a menu section
         self.calprep = QMenu(self.main_menu_pulldown)
@@ -136,8 +142,10 @@ class MainMenu(QMainWindow):
         self.main_menu_pulldown.addAction(self.anmenu.menuAction())
         #end of menu head
         
-        #setup a menu item in a menu section.   
+        #setup a menu item in a menu section. 
+        self.action_delan=MainMenuQAction(self,'action_delan', 'Delete analysis Group (select analysis group)', self.anmenu, [('h5open', [True]),  ('selectiongrouptype', ['analysis'])], self.ActionDict)
         self.action_screcipe=MainMenuQAction(self,'action_screcipe', 'Build SC analysis recipe (select heat program)', self.anmenu, [('h5open', [True]),  ('selectiongrouptype', ['heatprogram'])], self.ActionDict)
+        self.action_applyscrecipe=MainMenuQAction(self,'action_applyscrecipe', 'Apply SC analysis recipe (select experiment or heat program)', self.anmenu, [('h5open', [True]),  ('selectiongrouptype', ['experiment', 'heatprogram'])], self.ActionDict)
 
         self.setMenuBar(self.main_menu_pulldown)
         QMetaObject.connectSlotsByName(self)
@@ -215,6 +223,8 @@ class MainMenu(QMainWindow):
                 self.statusdict['selectiongrouptype']='heatprogram'
             elif self.statusdict['selectionparentname']=='Calorimetry':
                 self.statusdict['selectiongrouptype']='experiment'
+            elif self.statusdict['selectionparentname']=='analysis':
+                self.statusdict['selectiongrouptype']='analysis'
             else:
                 self.statusdict['selectiongrouptype']='other'
         else:
@@ -267,7 +277,13 @@ class MainMenu(QMainWindow):
         h5file=h5py.File(self.h5path, mode='r')
         fillh5tree(self.treeWidget, h5file)
         h5file.close()
-        
+       
+       
+    @pyqtSignature("")
+    def on_action_editattrs_triggered(self):
+        path=self.geth5selectionpath(liststyle=False)
+        editattrs(self, self.h5path, path)
+    
     @pyqtSignature("")
     def on_action_delexpgrp_triggered(self):
         h5file=h5py.File(self.h5path, mode='r+')
@@ -400,12 +416,48 @@ class MainMenu(QMainWindow):
         h5file.close()
     
     @pyqtSignature("")
+    def on_action_getsegd_triggered(self):
+        pathlist=self.geth5selectionpath(liststyle=True)
+        self.data=CreateHeatProgSegDictList(self.h5path, pathlist[1], pathlist[4])
+    
+    @pyqtSignature("")
+    def on_action_viewSCanalysis_triggered(self):
+        pathlist=self.geth5selectionpath(liststyle=True)
+        self.data=CreateHeatProgSegDictList(self.h5path, pathlist[1], pathlist[4])
+        idialog=analysisviewerDialog(self, self.data, pathlist[1])
+        idialog.exec_()
+    
+    @pyqtSignature("")
+    def on_action_delan_triggered(self):
+        path=self.geth5selectionpath(liststyle=False)
+        g, garb, p=path.strip('/').rpartition('/')
+        h5file=h5py.File(self.h5path, mode='r+')
+        h5g=h5file[g]
+        del h5g[p]
+        h5file.close()
+        h5file=h5py.File(self.h5path, mode='r')
+        fillh5tree(self.treeWidget, h5file)
+        h5file.close()
+        self.actionenable()
+        
+    @pyqtSignature("")
     def on_action_screcipe_triggered(self):
         pathlist=self.geth5selectionpath(liststyle=True)
         idialog=SCrecipeDialog(self, self.h5path, pathlist[1], pathlist[4])
         if not idialog.exec_():
             return
-    
+
+    @pyqtSignature("")
+    def on_action_applyscrecipe_triggered(self):
+        pathlist=self.geth5selectionpath(liststyle=True)
+        if self.statusdict['selectiongrouptype']=='heatprogram':
+            h5hpdflt=pathlist[4]
+        else:
+            h5hpdflt=None
+        idialog=SCanalysisDialog(self, self.h5path, pathlist[1], h5hpdflt=h5hpdflt)
+        if not idialog.exec_():
+            return
+
 class MainMenuQAction(QAction):
     def __init__(self, parent, actionname, actiontext, hostmenu, reqs, adict):
         super(MainMenuQAction, self).__init__(parent)

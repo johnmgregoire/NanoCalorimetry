@@ -18,15 +18,24 @@ def savgolsmooth(x, nptsoneside=7, order = 4, dx=1.0, deriv=0): #based on scipy 
     return smooth_data
 
 def removeoutliers_meanstd(arr, nptsoneside, nsig, gapptsoneside=0): #avrages maximum of 2*nptoneside points and usees distance from mean scaled by std compared to nsig to determine if the value should be replaced by the mean. if gapptsoneside>0, will do this leaving a gap around the point in question and using nptsoneside-gaps points for the mean and std
+    if nptsoneside==1 and gapptsoneside==0:
+        return removesinglepixoutliers(arr, critratiotoneighbors=nsig)
     nsig=max(nsig, 1.)
     nptsoneside=max(nptsoneside, 2.)
     gapptsoneside=min(gapptsoneside, nptsoneside-2.)
     for gap in range(gapptsoneside+1):
         starti=numpy.uint32([max(i-(nptsoneside-gap), 0) for i in range(len(arr))])
         stopi=numpy.uint32([min(i+(nptsoneside-gap)+1, len(arr)) for i in range(len(arr))])
-        print [numpy.append(arr[i0:i], arr[i+1:i1]) for i, i0, i1 in zip(range(len(arr)), starti, stopi)][8]
-        print [(((numpy.append(arr[i0:i], arr[i+1:i1]).mean()-arr[i]))**2, (numpy.append(arr[i0:i], arr[i+1:i1]).std()*nsig)**2) for i, i0, i1 in zip(range(len(arr)), starti, stopi)][8]
+        #print [numpy.append(arr[i0:i], arr[i+1:i1]) for i, i0, i1 in zip(range(len(arr)), starti, stopi)][8]
+        #print [(((numpy.append(arr[i0:i], arr[i+1:i1]).mean()-arr[i]))**2, (numpy.append(arr[i0:i], arr[i+1:i1]).std()*nsig)**2) for i, i0, i1 in zip(range(len(arr)), starti, stopi)][8]
         arr=numpy.array([(((numpy.append(arr[i0:i], arr[i+1:i1]).mean()-arr[i]))**2<(numpy.append(arr[i0:i], arr[i+1:i1]).std()*nsig)**2 and (arr[i],) or (numpy.append(arr[i0:i], arr[i+1:i1]).mean(),))[0] for i, i0, i1 in zip(range(len(arr)), starti, stopi)], dtype=arr.dtype)
+    return arr
+
+def removesinglepixoutliers(arr,critratiotoneighbors=1.5):
+    c=numpy.where((arr[1:-1]>(critratiotoneighbors*arr[:-2]))*(arr[1:-1]>(critratiotoneighbors*arr[2:])))
+    c0=c[0]+1
+    #print len(c0), ' pixels being replaced'
+    arr[c0]=(arr[c0-1]+arr[c0+1])/2
     return arr
     
 def findlocmax(arr, critval=0.):
@@ -75,7 +84,6 @@ def Q_IVdIdV(I, V, dI, dV, R0, alpha):
     
 def replacevalswithneighsin2nddim(arr, inds):
     iall, jall=inds
-    
     for n in range(arr.shape[0]):
         j=jall[iall==n]
         if len(j)==0:
@@ -91,16 +99,19 @@ def replacevalswithneighs(arr, inds):
     arr[inds]=arr[juse]
     return arr
     
-def performgenericfilter(arr, filterdict):
+def performgenericfilter(arr, filterdict):#filterdict can contains unused key:val but it must contain all those necessary for a given filter step to be performed
+    arr=copy.copy(arr)
     fcn_parname_fkey=[\
     (removeoutliers_meanstd, ['nptsoneside', 'nsig', 'gapptsoneside'], ['OLnpts', 'OLnsig', 'OLgappts']), \
     (savgolsmooth, ['nptsoneside', 'order', 'deriv'], ['SGnpts', 'SGorder', 'SGderiv']), \
     ]
-    for f, nl, kl in fkeyl:
+    for f, nl, kl in fcn_parname_fkey:
         parlist=[((not k in filterdict) or filterdict[k] is None) or (n, filterdict[k]) for n, k in zip(nl, kl)] 
         if True in parlist:
             continue
-        arr=f(arr, **dict(parlist))
+        print 'executing filter function ', f.func_name, dict(parlist)
+        print arr.shape
+        arr=numpy.array([f(a, **dict(parlist)) for a in arr])
     #arr=removeoutliers_meanstd(arr, nptsoneside=filterdict['OLnpts'], nsig=filterdict['OLnsig'], gapptsoneside=filterdict['OLgappts'])
     #savgolsmooth(arr, nptsoneside=filterdict['SGnpts'], order=filterdict['SGorder'], deriv=filterdict['SGderiv'])
     return arr
