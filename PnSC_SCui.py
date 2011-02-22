@@ -243,11 +243,15 @@ class SCrecipeDialog(QDialog):
 
         if self.plotdialog is None:
             self.plotdialog=analysisviewerDialog(None, self.hpsegdlist, hpname=self.h5hpname)
+            self.plotdialog.drawall()
             self.plotdialog.show()
+            self.plotdialog.activateWindow()
         else:
             self.plotdialog.hpsegdlist=self.hpsegdlist
             self.plotdialog.initwidgets()
+            self.plotdialog.drawall()
             self.plotdialog.show()
+            self.plotdialog.activateWindow()
 
     def slidermoved0(self):
         self.updateparwidgets(0)
@@ -650,12 +654,16 @@ class SCanalysisDialog(QDialog):#***
                     hpsegdlist[si][saven]=arr
             if self.plotdialog is None:
                 self.plotdialog=analysisviewerDialog(None, hpsegdlist, hpname=h5hpname)
+                self.plotdialog.drawall()
                 self.plotdialog.show()
+                self.plotdialog.activateWindow()
             else:
                 self.plotdialog.hpsegdlist=hpsegdlist
                 self.plotdialog.hpname=h5hpname
                 self.plotdialog.initwidgets()
+                self.plotdialog.drawall()
                 self.plotdialog.show()
+                self.plotdialog.activateWindow()
             saveSCcalculations(self.h5path, self.h5expname, h5hpname, hpsegdlist)
 #        if not newfilterd:
 #            print 'error importing filters from ', h5exp

@@ -433,7 +433,7 @@ class MainMenu(QMainWindow):
         pathlist=self.geth5selectionpath(liststyle=True)
         self.data=CreateHeatProgSegDictList(self.h5path, pathlist[1], pathlist[4])
         idialog=analysisviewerDialog(self, self.data, pathlist[1])
-        idialog.exec_()
+        idialog.show()
     
     @pyqtSignature("")
     def on_action_delan_triggered(self):
@@ -452,8 +452,7 @@ class MainMenu(QMainWindow):
     def on_action_screcipe_triggered(self):
         pathlist=self.geth5selectionpath(liststyle=True)
         idialog=SCrecipeDialog(self, self.h5path, pathlist[1], pathlist[4])
-        if not idialog.exec_():
-            return
+        idialog.show()
 
     @pyqtSignature("")
     def on_action_applyscrecipe_triggered(self):
@@ -463,8 +462,7 @@ class MainMenu(QMainWindow):
         else:
             h5hpdflt=None
         idialog=SCanalysisDialog(self, self.h5path, pathlist[1], h5hpdflt=h5hpdflt)
-        if not idialog.exec_():
-            return
+        idialog.show()
 
 class MainMenuQAction(QAction):
     def __init__(self, parent, actionname, actiontext, hostmenu, reqs, adict):
