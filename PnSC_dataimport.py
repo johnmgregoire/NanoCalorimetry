@@ -178,10 +178,10 @@ def PatDAQ_filenamedecode(filepath):
                 underscoreallowed=False #so only one underscore can be deleted
             a=a[:-1]
             a=a.strip()
-        d['ambient_atmosphere']=n+'mT'
+        d['ambient_atmosphere']=str(n+'mT')
         for temp in ['He', 'N2', 'Ar', 'H2', 'CO2', 'O2']:
             if temp in filename:
-                d['ambient_atmosphere']+=' '+temp
+                d['ambient_atmosphere']+=str(' '+temp)
         fn=a+c
     if 'c' in fn:#this is for the number of cycles, just remove this character and any neighboring numbers
         a, b, c=fn.partition('c')

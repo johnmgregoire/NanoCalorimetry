@@ -2,6 +2,17 @@ import numpy
 import h5py
 import os, os.path, time, copy
 
+#def ndiv(x, nptsoneside=20):
+#    nptsoneside=max(nptsoneside, 2.)
+#    gapptsoneside=min(gapptsoneside, nptsoneside-2.)
+#    for gap in range(gapptsoneside+1):
+#        starti=numpy.uint32([max(i-(nptsoneside-gap), 0) for i in range(len(arr))])
+#        stopi=numpy.uint32([min(i+(nptsoneside-gap)+1, len(arr)) for i in range(len(arr))])
+#        #print [numpy.append(arr[i0:i], arr[i+1:i1]) for i, i0, i1 in zip(range(len(arr)), starti, stopi)][8]
+#        #print [(((numpy.append(arr[i0:i], arr[i+1:i1]).mean()-arr[i]))**2, (numpy.append(arr[i0:i], arr[i+1:i1]).std()*nsig)**2) for i, i0, i1 in zip(range(len(arr)), starti, stopi)][8]
+#        arr=numpy.array([(((numpy.append(arr[i0:i], arr[i+1:i1]).mean()-arr[i]))**2<(numpy.append(arr[i0:i], arr[i+1:i1]).std()*nsig)**2 and (arr[i],) or (numpy.append(arr[i0:i], arr[i+1:i1]).mean(),))[0] for i, i0, i1 in zip(range(len(arr)), starti, stopi)], dtype=arr.dtype)
+#    return arr
+    
 def savgolsmooth(x, nptsoneside=7, order = 4, dx=1.0, deriv=0): #based on scipy cookbook. x is 1-d array, window is the number of points used to smooth the data, order is the order of the smoothing polynomial, will return the smoothed "deriv"th derivative of x
     side=numpy.uint16(max(nptsoneside, numpy.ceil(order/2.)))
     s=numpy.r_[2*x[0]-x[side:0:-1],x,2*x[-1]-x[-2:-1*side-2:-1]]
@@ -77,10 +88,10 @@ def temp_res(R, R0, T0, alpha):
     return (R/R0-1.)/alpha+T0
 
 def dT_IVdIdV(I, V, dI, dV, R0, alpha):
-    return (I*dV-V*dI)*alpha/R0/dI**2
+    return (I*dV-V*dI)/alpha/R0/I**2
 
 def Q_IVdIdV(I, V, dI, dV, R0, alpha):
-    return I*V*dI**2*R0/(I*dV-V*dI)/alpha
+    return V*I**3*R0*alpha/(I*dV-V*dI)
     
 def replacevalswithneighsin2nddim(arr, inds):
     iall, jall=inds

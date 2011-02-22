@@ -130,7 +130,7 @@ class MainMenu(QMainWindow):
         #end of menu head
         
         #setup a menu item in a menu section.   
-        self.action_calcresistance=MainMenuQAction(self,'action_calcresistance', 'Calc cell Res (select heat program)', self.calprep, [('h5open', [True]),  ('selectiongrouptype', ['heatprogram'])], self.ActionDict)
+        self.action_calcresistance=MainMenuQAction(self,'action_calcresistance', 'Calc cell Res (select heat program or experiment)', self.calprep, [('h5open', [True]),  ('selectiongrouptype', ['heatprogram', 'experiment'])], self.ActionDict)
         self.action_setuprescal=MainMenuQAction(self,'action_setuprescal', 'Setup R(T) cal', self.calprep, [('h5open', [True])], self.ActionDict)
         self.action_assignrescal=MainMenuQAction(self,'action_assignrescal', 'Assign R(T) cal (select experiment)', self.calprep, [('h5open', [True]), ('selectiongrouptype', ['experiment'])], self.ActionDict)
         #end of actions
@@ -336,27 +336,35 @@ class MainMenu(QMainWindow):
     @pyqtSignature("")
     def on_action_calcresistance_triggered(self):
         pathlist=self.geth5selectionpath(liststyle=True)
-        dlist=CreateHeatProgSegDictList(self.h5path, pathlist[1], pathlist[4]) 
-        segtypelist=[d['segmenttype'] for d in dlist]
-        if segtypelist.count('soak')==1:
-            dsoak=dlist[segtypelist.index('soak')]
-        elif segtypelist.count('soak')>1:
-            print 'ERROR - MORE THAN ONE SOAK SEGMENT WAS FOUND - THIS IS UNEXPECTED FOR AN Ro HEAT PROGRAM'
-            return
+        if self.statusdict['selectiongrouptype']=='experiment':
+            h5file, hplist=experimenthppaths(self.h5path, pathlist[1])
+            h5file.close()
+            hplist=[hpp.rpartition('/')[2] for hpp in hplist]
         else:
-            print 'ERROR - NO SOAK SEGMENTS WERE FOUND - ONE IS REQUIRED FOR AN Ro HEAT PROGRAM'
-            return
-        vals=[]
-        vals+=[CalcR0_segdict(dsoak, AveBeforeDivision=True)]
-        vals+=[CalcR0_segdict(dsoak, AveBeforeDivision=False)]
-        vals+=[(vals[0]+vals[1])/2.]
-        desc=['ratio of the means', 'mean of the ratios', 'Ave of these 2 values']
-        choices=['%.4f : %s' %(v, d) for v, d in zip(vals, desc)]
-        idialog=selectorDialog(self, choices, title='select value of R0 to use')
-        if not idialog.exec_():
-            return
-        R0=vals[idialog.index]
-        writecellres(self.h5path, pathlist[1], pathlist[4], R0)
+            hplist=[pathlist[4]]
+        for hp in hplist:
+            print hp
+            dlist=CreateHeatProgSegDictList(self.h5path, pathlist[1], hp) 
+            segtypelist=[d['segmenttype'] for d in dlist]
+            if segtypelist.count('soak')==1:
+                dsoak=dlist[segtypelist.index('soak')]
+            elif segtypelist.count('soak')>1:
+                print 'ERROR - MORE THAN ONE SOAK SEGMENT WAS FOUND - THIS IS UNEXPECTED FOR AN Ro HEAT PROGRAM'
+                return
+            else:
+                print 'ERROR - NO SOAK SEGMENTS WERE FOUND - ONE IS REQUIRED FOR AN Ro HEAT PROGRAM'
+                return
+            vals=[]
+            vals+=[CalcR0_segdict(dsoak, AveBeforeDivision=True)]
+            vals+=[CalcR0_segdict(dsoak, AveBeforeDivision=False)]
+            vals+=[(vals[0]+vals[1])/2.]
+            desc=['ratio of the means', 'mean of the ratios', 'Ave of these 2 values']
+            choices=['%.4f : %s' %(v, d) for v, d in zip(vals, desc)]
+            idialog=selectorDialog(self, choices, title='select value of R0 to use')
+            if not idialog.exec_():
+                return
+            R0=vals[idialog.index]
+            writecellres(self.h5path, pathlist[1], hp, R0)
         h5file=h5py.File(self.h5path, mode='r')
         fillh5tree(self.treeWidget, h5file)
         h5file.close()

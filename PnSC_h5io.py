@@ -220,9 +220,7 @@ def writecellres(h5path, h5expname, h5hpname, R):
 
     i=getindex_cell(h5file, h5hpgrp.attrs['CELLNUMBER'])
     h5res[i]=R
-    temp=h5hpgrp.attrs['ambient_tempC']
-    temp[i]=h5hpgrp.attrs['ambient_tempC']
-    h5res.attrs['ambient_tempC']=temp
+    h5res.attrs['ambient_tempC'][i]=h5hpgrp.attrs['ambient_tempC']
     h5file.close()
 
 def experimentgrppaths(h5pf):
@@ -336,11 +334,14 @@ def getfilterdict(h5pf, h5expname):
         return False
     filterd={}
     for pnt in h5filter.values():
-        d={}
-        nam=pnt.name.rpartition('/')[2]
-        for k, v in pnt.attrs.iteritems():
-            d[k]=(v=='None' and (None,) or (v,))[0]
-        filterd[nam]=d
+        if isinstance(pnt, h5py.Group):
+            d={}
+            nam=pnt.name.rpartition('/')[2]
+            for k, v in pnt.attrs.iteritems():
+                d[k]=(v=='None' and (None,) or (v,))[0]
+            if len(d.keys())==0:
+                continue
+            filterd[nam]=d
     if isinstance(h5pf, str):
         return h5file, filterd
     return filterd

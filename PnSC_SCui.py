@@ -34,7 +34,7 @@ class SCrecipeDialog(QDialog):
         parLayout = QVBoxLayout()
         self.pardlist=[]
         
-        d=self.calclayoutgen('R', ['', ''])
+        d=self.calclayoutgen('R', [''])
         parLayout.addWidget(d['widget'])
         d['savename']='sampleresistance'
         d['fcns']=[R_IV]
@@ -46,7 +46,7 @@ class SCrecipeDialog(QDialog):
         self.pardlist+=[copy.copy(d)]
         QObject.connect(d['slider'], SIGNAL("sliderReleased()"), self.slidermoved0)
         
-        d=self.calclayoutgen('T', ['', ''])
+        d=self.calclayoutgen('T', [''])
         parLayout.addWidget(d['widget'])
         d['savename']='sampletemperature'
         d['fcns']=[T_IV]
@@ -70,14 +70,14 @@ class SCrecipeDialog(QDialog):
         self.pardlist+=[copy.copy(d)]
         QObject.connect(d['slider'], SIGNAL("sliderReleased()"), self.slidermoved2)
         
-        d=self.calclayoutgen('S', ['(IdV-VdI)/dI2', 'dT/dt'])
+        d=self.calclayoutgen('S', ['(IdV-VdI)/dI2', 'dT/dt'])#, 'avedT/dt'])
         parLayout.addWidget(d['widget'])
         d['savename']='sampleheatrate'
-        d['fcns']=[S_IV, S_T]
-        d['parnames']=[['I', 'V', 'dIdt', 'dVdt'], ['dTdt']]
-        d['segdkeys']=[['samplecurrent', 'samplevoltage', 'samplecurrent', 'samplevoltage'], ['sampletemperature']]
-        d['postcombofcns']=[self.filterfill, self.filterfill]
-        d['parcombofcns']=[[self.filterfill, self.filterfill, self.derfilterfill, self.derfilterfill], [self.derfilterfill]]
+        d['fcns']=[S_IV, S_T]#, S_Tavesl]
+        d['parnames']=[['I', 'V', 'dIdt', 'dVdt'], ['dTdt']]#, ['dTdt']]
+        d['segdkeys']=[['samplecurrent', 'samplevoltage', 'samplecurrent', 'samplevoltage'], ['sampletemperature']]#, ['sampletemperature']]
+        d['postcombofcns']=[self.filterfill, self.filterfill]#, self.filterfill]
+        d['parcombofcns']=[[self.filterfill, self.filterfill, self.derfilterfill, self.derfilterfill], [self.derfilterfill]]#, [self.derfilterfill]]
         d['slider'].setMaximum(len(d['parnames'])-1)
         self.pardlist+=[copy.copy(d)]
         QObject.connect(d['slider'], SIGNAL("sliderReleased()"), self.slidermoved3)
@@ -392,13 +392,21 @@ class SCrecipeDialog(QDialog):
         gridLayout = QGridLayout(gridLayoutWidget)
         gridLayout.setHorizontalSpacing(6)
         gridLayout.setObjectName("gridLayout")
-        eqLabel0 = QLabel(gridLayoutWidget)
-        font = QFont()
-        font.setPointSize(14)
-        eqLabel0.setFont(font)
-        eqLabel0.setObjectName("eqLabel0")
-        eqLabel0.setText(eqnames[0])
-        gridLayout.addWidget(eqLabel0, 1, 4, 2, 1)
+        
+        eqlablayout=QVBoxLayout()
+        eqLabellist=[]
+        if len(eqnames)>0:
+            font = QFont()
+            font.setPointSize(max(8, min(14, 29//len(eqnames))))
+        for eqn in eqnames:
+            eqLabel0 = QLabel(gridLayoutWidget)
+            eqLabel0.setFont(font)
+            #eqLabel0.setObjectName("eqLabel0")
+            eqLabel0.setText(eqn)
+            eqlablayout.addWidget(eqLabel0)
+            eqLabellist+=[eqLabel0]
+        gridLayout.addLayout(eqlablayout, 1, 4, 4, 1)
+        
         filterComboBox3 = QComboBox(gridLayoutWidget)
         filterComboBox3.setObjectName("filterComboBox3")
         gridLayout.addWidget(filterComboBox3, 4, 7, 1, 1)
@@ -411,13 +419,6 @@ class SCrecipeDialog(QDialog):
         filterComboBox0 = QComboBox(gridLayoutWidget)
         filterComboBox0.setObjectName("filterComboBox0")
         gridLayout.addWidget(filterComboBox0, 1, 7, 1, 1)
-        eqLabel1 = QLabel(gridLayoutWidget)
-        font = QFont()
-        font.setPointSize(14)
-        eqLabel1.setFont(font)
-        eqLabel1.setObjectName("eqLabel1")
-        eqLabel1.setText(eqnames[1])
-        gridLayout.addWidget(eqLabel1, 3, 4, 2, 1)
         parLabel0 = QLabel(gridLayoutWidget)
         parLabel0.setObjectName("parLabel0")
         gridLayout.addWidget(parLabel0, 1, 6, 1, 1)
@@ -476,7 +477,7 @@ class SCrecipeDialog(QDialog):
         d['parlabels']=[parLabel0, parLabel1, parLabel2, parLabel3]
         d['parcombos']=[filterComboBox0, filterComboBox1, filterComboBox2, filterComboBox3]
         d['slider']=eqSlider
-        d['eqlabels']=[eqLabel0, eqLabel1]
+        d['eqlabels']=eqLabellist
         d['postcombo']=postfilterComboBox
         d['name']=varname
         d['eqnames']=eqnames
@@ -675,12 +676,12 @@ class analysisviewerDialog(QDialog):
         rows=[0, 1]
         cols=[0, 1, 2]
         segcbfcns=[lambda garb=None: self.segcgchanged(ploti=0), lambda garb=None: self.segcgchanged(ploti=1), lambda garb=None: self.segcgchanged(ploti=2), lambda garb=None: self.segcgchanged(ploti=3), lambda garb=None: self.segcgchanged(ploti=4), lambda garb=None: self.segcgchanged(ploti=5)]
-        drawfcns=[lambda : self.draw(ploti=0), lambda : self.draw(ploti=1), lambda : self.draw(ploti=2), lambda : self.draw(ploti=3), lambda : self.draw(ploti=4), lambda : self.draw(ploti=5)]
+        self.drawfcns=[lambda : self.draw(ploti=0), lambda : self.draw(ploti=1), lambda : self.draw(ploti=2), lambda : self.draw(ploti=3), lambda : self.draw(ploti=4), lambda : self.draw(ploti=5)]
         for row in rows:
             for col in cols:
                 playout=QGridLayout()
                 d=self.plotmenuwidget()
-                QObject.connect(d['draw'], SIGNAL("pressed()"), drawfcns[row*len(cols)+col])
+                QObject.connect(d['draw'], SIGNAL("pressed()"), self.drawfcns[row*len(cols)+col])
                 QObject.connect(d['segcb'],SIGNAL("activated(QString)"),segcbfcns[row*len(cols)+col])
                 plotw=plotwidget(self)
                 d['plotw']=plotw
@@ -690,6 +691,14 @@ class analysisviewerDialog(QDialog):
                 self.plotsdlist+=[d]
         self.setLayout(plotslayout)
         self.initwidgets()
+    
+    def drawall(self):
+        for f in self.drawfcns:
+            try:
+                f()
+            except:
+                print 'error during auto plotting'
+
     def initwidgets(self):
         self.setWindowTitle('Multi-plot view of calorimetry calculations: %s' %self.hpname)
         self.segcalcoptions=[]
@@ -712,6 +721,7 @@ class analysisviewerDialog(QDialog):
         self.segcalcnames+=['all segs']
         self.segcalcoptions+=[numpy.array(range(len(self.hpsegdlist)))]
         ycbdflts=['samplecurrent', 'samplevoltage', 'sampletemperature', 'samplepower', 'sampleheatrate', 'samplepowerperrate']
+        xcbdflts=['cycletime', 'cycletime', 'cycletime', 'cycletime', 'cycletime', 'sampletemperature']
         temp=len(self.segcalcoptions)-1
         segdflt=[temp, temp, temp-1, temp-1, temp-1, temp-1]
         for ploti, (d, yd, sd) in enumerate(zip(self.plotsdlist, ycbdflts, segdflt)):
@@ -906,7 +916,7 @@ def S_IV(segd, fild, I, V, dIdt, dVdt, h5path, h5expname, h5hpname):#the I, dIdt
     V_=segd['~'.join(V)]
     dIdt_=segd['~'.join(dIdt)]
     dVdt_=segd['~'.join(dVdt)]
-    inds=numpy.where(dIdt_==0.)# these 3 lines will effectively remove neg and inf Res and replace them with the res value of the nearest acceptable value. These modification will no be reflected in the segd values for the source data
+    inds=numpy.where(I_==0.)# these 3 lines will effectively remove neg and inf Res and replace them with the res value of the nearest acceptable value. These modification will no be reflected in the segd values for the source data
     if len(inds[0])>0:
         I_=replacevalswithneighsin2nddim(I_, inds)
         V_=replacevalswithneighsin2nddim(V_, inds)
@@ -915,6 +925,17 @@ def S_IV(segd, fild, I, V, dIdt, dVdt, h5path, h5expname, h5hpname):#the I, dIdt
     return dT_IVdIdV(I_, V_, dIdt_, dVdt_, RoToAl[0], RoToAl[2])
     
 def S_T(segd, fild, dTdt, h5path, h5expname, h5hpname):#the I, dIdt, etc. should be tuples with a key for segd and then a key for fild
+    dt=dt_h5(h5path, h5expname, h5hpname)
+    for tup in [dTdt]:
+        (segkey, filkey)=tup
+        if not '~'.join(tup) in segd.keys():
+            segd['~'.join(tup)]=performgenericfilter(segd[segkey], fild[filkey])
+        if True in [v>0 for k, v in fild[filkey].iteritems() if 'deriv' in k]: #this handle deriv filters other than SG but if the deriv is not wrt dt something needs to change
+            segd['~'.join(tup)]/=dt
+    dTdt_=segd['~'.join(dTdt)]
+    return dTdt_
+
+def S_Tavesl(segd, fild, dTdt, h5path, h5expname, h5hpname):#the I, dIdt, etc. should be tuples with a key for segd and then a key for fild
     dt=dt_h5(h5path, h5expname, h5hpname)
     for tup in [dTdt]:
         (segkey, filkey)=tup
@@ -955,7 +976,7 @@ def Q_PS(segd, fild, P, S, h5path=None, h5expname=None, h5hpname=None):
         #    segd['~'.join(tup)]/=dt
     P_=segd['~'.join(P)]
     S_=segd['~'.join(S)]
-    inds=numpy.where(S_=0.)# these 3 lines will effectively remove neg and inf Res and replace them with the res value of the nearest acceptable value. These modification will no be reflected in the segd values for the source data
+    inds=numpy.where(S_==0.)# these 3 lines will effectively remove neg and inf Res and replace them with the res value of the nearest acceptable value. These modification will no be reflected in the segd values for the source data
     if len(inds[0])>0:
         P_=replacevalswithneighsin2nddim(P_, inds)
         S_=replacevalswithneighsin2nddim(S_, inds)
