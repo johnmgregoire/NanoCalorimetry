@@ -66,6 +66,18 @@ def writenewh5heatprogram(h5path, h5expname, grpname, AttrDict, DataSetDict, Seg
     
     h5file.close()
 
+def geth5attrs(h5pf, h5grppath):#closes the h5file, doesnt return it
+    if isinstance(h5pf, str):
+        h5file=h5py.File(h5pf, mode='r')
+    else:
+        h5file=h5pf
+    d={}
+    for k, v in h5file[h5grppath].attrs.iteritems():
+        d[k]=(v=='None' and (None,) or (v,))[0]
+    if isinstance(h5pf, str):
+        h5file.close()
+    return d
+    
 def getindex_cell(h5pf, cellnum):#closes the h5file, doesnt return it
     if isinstance(h5pf, str):
         h5file=h5py.File(h5pf, mode='r')
@@ -134,7 +146,7 @@ def msarr_hpgrp(h5hpgrp, twod=False):
 
 def segtypes():
     return ['step', 'soak', 'ramp', 'zero']
-def CreateHeatProgSegDictList(h5path, h5expname, h5hpname, critms_step=1., critmAperms_constmA=0.0005, critmA_zero=0.05):
+def CreateHeatProgSegDictList(h5path, h5expname, h5hpname, critms_step=1., critmAperms_constmA=0.01, critmA_zero=0.1):
 #the segment types are step, soak, ramp, zero
 #the CreateHeatProgSegDictList function reads the data from the .h5 file and organizes in a way that will be useful for many types of analysis. 
 #the function returns a list where there is one dict for each segment in the heat program. Each dict value that is an array is assumed to be data and all have the same shape
@@ -189,7 +201,7 @@ def piecetogethersegments(arrlist):
     cycles=arrlist[0].shape[0]
     return numpy.array([numpy.concatenate([arr[c] for arr in arrlist]) for c in range(cycles)], dtype=arrlist[0].dtype)
     
-def saveSCcalculations(h5path, h5expname, h5hpname, hpsegdlist):
+def saveSCcalculations(h5path, h5expname, h5hpname, hpsegdlist, recname):
     h5file=h5py.File(h5path, mode='r+')
     h5an=getcalanalysis(h5file, h5expname)
     h5hp=gethpgroup(h5file, h5expname)
@@ -197,7 +209,6 @@ def saveSCcalculations(h5path, h5expname, h5hpname, hpsegdlist):
         h5g=h5an[h5hpname]
     else:
         h5g=h5an.create_group(h5hpname)
-
     savekeys=set([k for d in hpsegdlist for k in d.keys() if not ('~' in k or k in h5hp[h5hpname] or k=='cycletime') and isinstance(d[k], numpy.ndarray) and d[k].shape==d['cycletime'].shape])
     nansegs=[numpy.ones(d['cycletime'].shape, dtype=d['cycletime'].dtype)*numpy.nan for d in hpsegdlist]
     mastershape=piecetogethersegments([d['cycletime'] for d in hpsegdlist]).shape
@@ -205,7 +216,8 @@ def saveSCcalculations(h5path, h5expname, h5hpname, hpsegdlist):
         savearr=piecetogethersegments([(k in d.keys() and (d[k],) or (ns,))[0] for d, ns in zip(hpsegdlist, nansegs)])
         if k in h5g:
             del h5g[k]
-        h5g.create_dataset(k, data=savearr)
+        ds=h5g.create_dataset(k, data=savearr)
+        ds.attrs['recipe']=recname
     h5file.close()
 
 def writecellres(h5path, h5expname, h5hpname, R):
@@ -473,7 +485,37 @@ def rescalpath_getorassign(h5pf, h5expname, parent=None, forceassign=False, titl
         if openclose:
             h5file.close()
         return path
-        
+
+def performreferencesubtraction(segd, segkey, filter, h5path):
+    ashape=segd[segkey].shape
+    h5file=h5py.File(h5path, mode='r')
+    refh5grp=h5file['REFh5path']
+    if not 'REFalignment' in filter.keys() or not filter['REFalignment'] in segd.keys():
+        ref_ind=[0 for temp in range(ashape[0])]
+        print 'using start of scan as alignment'
+    else:
+        k=filter['REFalignment']
+        arr=segd[k]
+        ref=refh5grp[k][:, :]
+        if ref.shape[0]==ashape[0]:
+            pass
+        elif ref.shape[0]<ashape[0]:
+            ref=numpy.array([ref[0]]*ashape[0], dtype=ref.dtype) #use the first cycles over and over again
+        else:
+            ref=ref[:ashape[0], :]
+        if ref.shape[1]==shape[1]:
+            ref_ind=[0 for temp in range(ashape[0])]
+        elif ref.shape[1]>shape[1]:#in this case, use the alignment dataset to find out which start index (=shift) provides minimum distance between datasets
+            ref_ind=[numpy.argmin([((a-r[i:i+ashape[1]])**2).sum() for i in range(ref.shape[1]-ashape[1])]) for a, r in zip(arr, ref)]
+        else:
+            print 'ABORTING: THE REFERENCE DATA MUST BE AT LEAST AS LONG AS THE DATA'
+            h5file.close()
+            return
+    arr=segd[segkey]
+    ref=refh5grp[segkey][:, :]
+    return numpy.array([a-r[i:i+ashape[1]] for i, a, r in zip(ref_ind, arr, ref)], dtype=arr.dtype)
+    
+
 heatprogrammetadatafcns={\
 'Cell Temperature':tempvsms_heatprogram, \
 }#each must take h5path, h5expname, h5hpname as arguments

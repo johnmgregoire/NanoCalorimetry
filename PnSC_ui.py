@@ -17,6 +17,7 @@ import matplotlib.mlab as mlab
 import pylab
 from PnSC_math import *
 from PnSC_h5io import *
+import PnSC_h5io as io
 
 
 def mygetopenfile(parent=None, xpath="%s" % os.getcwd(),markstr='', filename='' ):
@@ -246,7 +247,44 @@ class attreditorDialog(QDialog):
                 self.attrd[a]=c
                 print a,  ' updated to ',  `c`
                 self.edited=True
-                
+            
+class SegmentCyclePlot(QDialog):
+    def __init__(self, parent, SegmentData, markersize=2):
+        super(SegmentCyclePlot, self).__init__(parent)
+
+        self.setWindowTitle('segments by color and cycles by color')
+        
+        cols=['k', 'y', 'b', 'm', 'g', 'c', 'r']*10#just to be sure there's enough
+
+        self.plotwlist=[[plotwidget(self) for j in range(3)] for i in range(2)]
+
+        self.markersize=markersize
+        
+        mainlayout=QGridLayout()
+        for i, lab1 in enumerate(['samplecurrent', 'samplevoltage']):
+            for j, lab2 in enumerate(['first cycle', 'all cycles', '1st 6 and last (red) cycles']):
+                mainlayout.addWidget(self.plotwlist[i][j], i, j)
+                self.plotwlist[i][j].axes.set_xlabel('cycle time (ms)')
+                self.plotwlist[i][j].axes.set_ylabel(lab1)
+                self.plotwlist[i][j].axes.set_title(lab2)
+        for d, col in zip(SegmentData, cols):
+            first=True
+            for count, (i, v) in enumerate(zip(d['samplecurrent'], d['samplevoltage'])):
+                if first:
+                    first=False
+                    self.plotwlist[0][0].axes.plot(d['cycletime'][0], i, col+'.', markersize=markersize)
+                    self.plotwlist[1][0].axes.plot(d['cycletime'][0], v, col+'.', markersize=markersize)
+                self.plotwlist[0][1].axes.plot(d['cycletime'][0], i, col+'.', markersize=markersize)
+                self.plotwlist[1][1].axes.plot(d['cycletime'][0], v, col+'.', markersize=markersize)
+                if count<6 or count==(d['samplecurrent'].shape[0]-1):
+                    if count<6:
+                        col2=cols[count]
+                    else:
+                        col2=cols[6]
+                    self.plotwlist[0][2].axes.plot(d['cycletime'][0], i, col2+'.', markersize=markersize)
+                    self.plotwlist[1][2].axes.plot(d['cycletime'][0], v, col2+'.', markersize=markersize)
+        self.setLayout(mainlayout)
+
 class SegmentEditor(QDialog):
     def __init__(self, parent, SegmentData, cycledata, maxpts=9, markersize=2):
         super(SegmentEditor, self).__init__(parent)
@@ -867,3 +905,105 @@ def editattrs(parent, h5path, path):
         for k, v in ad.iteritems():
             h5file[path].attrs[k]=v
         h5file.close()
+
+def get25pylabaxes(horizslowaxis=True, oneontop=True, oneonleft=True):
+
+    
+    pylab.figure(figsize=(9., 9.))
+    fig=pylab.gcf()
+
+#    xstart=list(numpy.linspace(0, 1., 5))*5
+#    xwidth=[.2]*25
+#    borderpadx1=[.02]*25
+#    borderpadx2=[.02]*25
+#
+#    ystart=[.9-i*.2 for i in range(1, 6) for j in range(5)]
+#    ywidth=[.2]*25
+#    borderpady1=[.02]*25
+#    borderpady2=[.02]*25
+#
+#    axl=[]
+#    for x, xw, bx1, bx2, y, yw, by1, by2 in zip(xstart, xwidth, borderpadx1, borderpadx2, ystart, ywidth, borderpady1, borderpady2):
+#        axl+=[fig.add_axes([x+bx1, y+by1, xw-bx1-bx2, yw-by1-by2])]
+    axl=[pylab.subplot(5, 5, i*5+j+1) for i in range(5) for j in range(5)]
+    
+    
+    if horizslowaxis:
+        if oneontop:
+            if oneonleft:
+                inds=range(25)
+            else:
+                inds=[i*5+j for i in range(5) for j in range(4,-1,-1)]
+        else:
+            if oneonleft:
+                inds=[i*5+j for i in range(4,-1,-1) for j in range(5)]
+            else:
+                inds=range(25)[::-1]
+    else:
+        if oneontop:
+            if oneonleft:
+                inds=[i+j*5 for i in range(5) for j in range(5)]
+            else:
+                inds=[i+j*5 for i in range(4,-1,-1) for j in range(5)]
+        else:
+            if oneonleft:
+                inds=[i+j*5 for i in range(5) for j in range(4,-1,-1)]
+            else:
+                inds=[i+j*5 for i in range(4, -1, -1) for j in range(4,-1,-1)]
+    return [axl[i] for i in inds]
+
+def plotsegmentsongrid(h5path, h5expname, axl, xkey, ykey, seginds, cycinds=[0], cellnums=range(1, 26), plotstyle='b-', samexlim=True):
+    h5file, nams=experimenthppaths(h5path, h5expname)
+    hpcells=[h5file[nam].attrs['CELLNUMBER'] for nam in nams]
+    print hpcells
+    cellsh5hpnames=[[cell, nams[hpcells.index(cell)].rpartition('/')[2]] for cell in cellnums if cell in hpcells]
+    h5file.close()
+    xmin=None
+    for cell, h5hpname in cellsh5hpnames:
+        print 'plotting cell %d' %cell
+        hpsdl=CreateHeatProgSegDictList(h5path, h5expname, h5hpname)
+        if isinstance(plotstyle, list):
+            ps=plotstyle[cellnums.index(cell)]
+        else:
+            ps=plotstyle
+        if not samexlim:
+            xmin=None
+        for ci in cycinds:
+            xvals=numpy.concatenate([hpsdl[i][xkey][ci] for i in seginds])
+            yvals=numpy.concatenate([hpsdl[i][ykey][ci] for i in seginds])
+            axl[cell-1].plot(xvals, yvals, ps)
+            if xmin is None:
+                xmin=xvals.min()
+                xmax=xvals.max()
+                ymin=yvals.min()
+                ymax=yvals.max()
+            else:
+                xmin=min(xmin, xvals.min())
+                xmax=max(xmax, xvals.max())
+                ymin=min(ymin, yvals.min())
+                ymax=max(ymax, yvals.max())
+        if not samexlim:
+            axl[cell-1].set_xlim(xmin, xmax)
+            axl[cell-1].set_ylim(ymin, ymax)
+        print xvals.min(), xvals.max(), yvals.min(), yvals.max(), numpy.isnan(yvals).sum()
+    if samexlim:
+        for cell, h5hpname in cellsh5hpnames:
+            axl[cell-1].set_xlim(xmin, xmax)
+            axl[cell-1].set_ylim(ymin, ymax)
+    
+def TEMP():
+    h5path='C:/Users/JohnnyG/Documents/PythonCode/Vlassak/NanoCalorimetry/2010Nov27_AuSiCu_pnsc.h5'
+    h5expname='heat1d'
+    axl=get25pylabaxes()
+    #axl=[pylab.subplot(111)]
+    print '****'
+    cellnums=sorted(list(set(range(1, 26))-set([3, 15, 21])))
+    #cellnums=[1]
+    plotsegmentsongrid(h5path, h5expname, axl, 'sampletemperature', 'samplepowerperrate', [2], cellnums=cellnums)
+    for ax in axl:
+        ax.set_yticks([])
+    pylab.show()
+    
+    print 'done'
+    
+    

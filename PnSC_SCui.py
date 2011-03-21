@@ -21,7 +21,7 @@ from PnSC_h5io import *
 
 
 class SCrecipeDialog(QDialog):
-    def __init__(self, parent, h5path, h5expname, h5hpname):
+    def __init__(self, parent, h5path, h5expname, h5hpname, calctype='RTPSD', par=None):
         super(SCrecipeDialog, self).__init__(parent)
         self.parent=parent
         self.h5path=h5path
@@ -31,68 +31,22 @@ class SCrecipeDialog(QDialog):
         
         self.setWindowTitle('SC analysis recipe editor')
         
-        parLayout = QVBoxLayout()
+        self.parLayout = QVBoxLayout()
         self.pardlist=[]
+        self.filterd={}
+        self.filterd['None']=self.Nonefilterdict()
+        self.filterd['dflt']=self.dfltfilterdict(deriv=0)
         
-        d=self.calclayoutgen('R', [''])
-        parLayout.addWidget(d['widget'])
-        d['savename']='sampleresistance'
-        d['fcns']=[R_IV]
-        d['parnames']=[['I', 'V']]
-        d['segdkeys']=[['samplecurrent', 'samplevoltage']]
-        d['postcombofcns']=[self.filterfill]
-        d['parcombofcns']=[[self.filterfill, self.filterfill]]
-        d['slider'].setMaximum(len(d['parnames'])-1)
-        self.pardlist+=[copy.copy(d)]
-        QObject.connect(d['slider'], SIGNAL("sliderReleased()"), self.slidermoved0)
+        if calctype=='RTPSD':
+            ncalcs=self.RTPSDsetup()
+            self.filterd['dt_dflt']=self.dfltfilterdict(deriv=1)
+        elif calctype=='QUC':
+            ncalcs=self.QUCsetup()
+            self.filterd['Qdflt']=self.Qfilterdict(par)
+            self.filterd['refdflt']=self.reffilterdict(par)
+            
         
-        d=self.calclayoutgen('T', [''])
-        parLayout.addWidget(d['widget'])
-        d['savename']='sampletemperature'
-        d['fcns']=[T_IV]
-        d['parnames']=[['I', 'V']]
-        d['segdkeys']=[['samplecurrent', 'samplevoltage']]
-        d['postcombofcns']=[self.filterfill]
-        d['parcombofcns']=[[self.filterfill, self.filterfill]]
-        d['slider'].setMaximum(len(d['parnames'])-1)
-        self.pardlist+=[copy.copy(d)]
-        QObject.connect(d['slider'], SIGNAL("sliderReleased()"), self.slidermoved1)
-        
-        d=self.calclayoutgen('P', ['IV', 'I2R'])
-        parLayout.addWidget(d['widget'])
-        d['savename']='samplepower'
-        d['fcns']=[P_IV, P_IR]
-        d['parnames']=[['I', 'V'], ['I', 'R']]
-        d['segdkeys']=[['samplecurrent', 'samplevoltage'], ['samplecurrent', 'sampleresistance']]
-        d['postcombofcns']=[self.filterfill, self.filterfill]
-        d['parcombofcns']=[[self.filterfill, self.filterfill], [self.filterfill, self.filterfill]]
-        d['slider'].setMaximum(len(d['parnames'])-1)
-        self.pardlist+=[copy.copy(d)]
-        QObject.connect(d['slider'], SIGNAL("sliderReleased()"), self.slidermoved2)
-        
-        d=self.calclayoutgen('S', ['(IdV-VdI)/dI2', 'dT/dt'])#, 'avedT/dt'])
-        parLayout.addWidget(d['widget'])
-        d['savename']='sampleheatrate'
-        d['fcns']=[S_IV, S_T]#, S_Tavesl]
-        d['parnames']=[['I', 'V', 'dIdt', 'dVdt'], ['dTdt']]#, ['dTdt']]
-        d['segdkeys']=[['samplecurrent', 'samplevoltage', 'samplecurrent', 'samplevoltage'], ['sampletemperature']]#, ['sampletemperature']]
-        d['postcombofcns']=[self.filterfill, self.filterfill]#, self.filterfill]
-        d['parcombofcns']=[[self.filterfill, self.filterfill, self.derfilterfill, self.derfilterfill], [self.derfilterfill]]#, [self.derfilterfill]]
-        d['slider'].setMaximum(len(d['parnames'])-1)
-        self.pardlist+=[copy.copy(d)]
-        QObject.connect(d['slider'], SIGNAL("sliderReleased()"), self.slidermoved3)
-        
-        d=self.calclayoutgen('Q', ['IVdI2/(IdV-VdI)', 'P/S'])
-        parLayout.addWidget(d['widget'])
-        d['savename']='samplepowerperrate'
-        d['fcns']=[Q_IV, Q_PS]
-        d['parnames']=[['I', 'V', 'dIdt', 'dVdt'], ['P', 'S']]
-        d['segdkeys']=[['samplecurrent', 'samplevoltage', 'samplecurrent', 'samplevoltage'], ['samplepower', 'sampleheatrate']]
-        d['postcombofcns']=[self.filterfill, self.filterfill]
-        d['parcombofcns']=[[self.filterfill, self.filterfill, self.derfilterfill, self.derfilterfill], [self.filterfill, self.filterfill]]
-        d['slider'].setMaximum(len(d['parnames'])-1)
-        self.pardlist+=[copy.copy(d)]
-        QObject.connect(d['slider'], SIGNAL("sliderReleased()"), self.slidermoved4)
+
         
         
         #*****************************************************
@@ -109,7 +63,7 @@ class SCrecipeDialog(QDialog):
         QObject.connect(newfilterButton, SIGNAL("pressed()"), self.newfilter)
         
         self.filterComboBox=QComboBox()
-        self.filterd={'None':self.Nonefilterdict(), 'dflt':self.dfltfilterdict(deriv=0), 'dt_dflt':self.dfltfilterdict(deriv=1)}
+        
         self.importfilters(h5exp=self.h5expname)
         self.fillfilterComboBox()
         
@@ -169,11 +123,11 @@ class SCrecipeDialog(QDialog):
         rightlayout.addWidget(self.recLineEdit, 4, 1)
         mainlayout.addLayout(rightlayout, 1, 2, 4, 2)
         
-        mainlayout.addLayout(parLayout, 5, 0, 20, 4)
+        mainlayout.addLayout(self.parLayout, 5, 0, ncalcs*4, 4)
         self.saveCheckBox=QCheckBox()
         self.saveCheckBox.setText('save calculations upon close')
         mainlayout.addWidget(self.saveCheckBox, 25, 0, 1, 2)
-        mainlayout.addWidget(self.buttonBox, 25, 2, 1, 2)
+        mainlayout.addWidget(self.buttonBox, ncalcs*4+5, 2, 1, 2)
         self.setLayout(mainlayout)
         
         self.plotdialog=None
@@ -189,17 +143,121 @@ class SCrecipeDialog(QDialog):
         self.slidermoved3()
         self.slidermoved4()
     
+    def RTPSDsetup(self):
+        d=self.calclayoutgen('R', [''])
+        self.parLayout.addWidget(d['widget'])
+        d['savename']='sampleresistance'
+        d['fcns']=[R_IV]
+        d['parnames']=[['I', 'V']]
+        d['segdkeys']=[['samplecurrent', 'samplevoltage']]
+        d['postcombofcns']=[self.filterfill]
+        d['parcombofcns']=[[self.filterfill, self.filterfill]]
+        d['slider'].setMaximum(len(d['parnames'])-1)
+        self.pardlist+=[copy.copy(d)]
+        QObject.connect(d['slider'], SIGNAL("sliderReleased()"), self.slidermoved0)
+        
+        d=self.calclayoutgen('T', [''])
+        self.parLayout.addWidget(d['widget'])
+        d['savename']='sampletemperature'
+        d['fcns']=[T_IV]
+        d['parnames']=[['I', 'V']]
+        d['segdkeys']=[['samplecurrent', 'samplevoltage']]
+        d['postcombofcns']=[self.filterfill]
+        d['parcombofcns']=[[self.filterfill, self.filterfill]]
+        d['slider'].setMaximum(len(d['parnames'])-1)
+        self.pardlist+=[copy.copy(d)]
+        QObject.connect(d['slider'], SIGNAL("sliderReleased()"), self.slidermoved1)
+        
+        d=self.calclayoutgen('P', ['IV', 'I2R'])
+        self.parLayout.addWidget(d['widget'])
+        d['savename']='samplepower'
+        d['fcns']=[P_IV, P_IR]
+        d['parnames']=[['I', 'V'], ['I', 'R']]
+        d['segdkeys']=[['samplecurrent', 'samplevoltage'], ['samplecurrent', 'sampleresistance']]
+        d['postcombofcns']=[self.filterfill, self.filterfill]
+        d['parcombofcns']=[[self.filterfill, self.filterfill], [self.filterfill, self.filterfill]]
+        d['slider'].setMaximum(len(d['parnames'])-1)
+        self.pardlist+=[copy.copy(d)]
+        QObject.connect(d['slider'], SIGNAL("sliderReleased()"), self.slidermoved2)
+        
+        d=self.calclayoutgen('S', ['(IdV-VdI)/dI2', 'dT/dt'])#, 'avedT/dt'])
+        self.parLayout.addWidget(d['widget'])
+        d['savename']='sampleheatrate'
+        d['fcns']=[S_IV, S_T]#, S_Tavesl]
+        d['parnames']=[['I', 'V', 'dIdt', 'dVdt'], ['dTdt']]#, ['dTdt']]
+        d['segdkeys']=[['samplecurrent', 'samplevoltage', 'samplecurrent', 'samplevoltage'], ['sampletemperature']]#, ['sampletemperature']]
+        d['postcombofcns']=[self.filterfill, self.filterfill]#, self.filterfill]
+        d['parcombofcns']=[[self.filterfill, self.filterfill, self.derfilterfill, self.derfilterfill], [self.derfilterfill]]#, [self.derfilterfill]]
+        d['slider'].setMaximum(len(d['parnames'])-1)
+        self.pardlist+=[copy.copy(d)]
+        QObject.connect(d['slider'], SIGNAL("sliderReleased()"), self.slidermoved3)
+        
+        d=self.calclayoutgen('D', ['IVdI2/(IdV-VdI)', 'P/S'])
+        self.parLayout.addWidget(d['widget'])
+        d['savename']='samplepowerperrate'
+        d['fcns']=[D_IV, D_PS]
+        d['parnames']=[['I', 'V', 'dIdt', 'dVdt'], ['P', 'S']]
+        d['segdkeys']=[['samplecurrent', 'samplevoltage', 'samplecurrent', 'samplevoltage'], ['samplepower', 'sampleheatrate']]
+        d['postcombofcns']=[self.filterfill, self.filterfill]
+        d['parcombofcns']=[[self.filterfill, self.filterfill, self.derfilterfill, self.derfilterfill], [self.filterfill, self.filterfill]]
+        d['slider'].setMaximum(len(d['parnames'])-1)
+        self.pardlist+=[copy.copy(d)]
+        QObject.connect(d['slider'], SIGNAL("sliderReleased()"), self.slidermoved4)
+        return 5
+
+    def QUCsetup(self):
+        d=self.calclayoutgen('Q', ['Qref','Qo+kA<T>+esA<T4>'])
+        self.parLayout.addWidget(d['widget'])
+        d['savename']='sampleheatloss'
+        d['fcns']=[Q_ref, Q_T]
+        d['parnames']=[['T'], ['T']]
+        d['segdkeys']=[['sampletemperature'], ['sampletemperature']]
+        d['postcombofcns']=[self.filterfill, self.filterfill]
+        d['parcombofcns']=[[self.refpathfilterfill], [self.Qmodelfilterfill]]#these filters need to be worked on
+        d['slider'].setMaximum(len(d['parnames'])-1)
+        self.pardlist+=[copy.copy(d)]
+        QObject.connect(d['slider'], SIGNAL("sliderReleased()"), self.slidermoved0)
+        
+        d=self.calclayoutgen('U', ['Uref','Q/S'])
+        self.parLayout.addWidget(d['widget'])
+        d['savename']='sampleheatlossperrate'
+        d['fcns']=[U_ref, U_QS]
+        d['parnames']=[['T'], ['Q', 'S']]
+        d['segdkeys']=[['sampletemperature'], ['sampleheatloss', 'sampleheatrate']]
+        d['postcombofcns']=[self.filterfill, self.filterfill]
+        d['parcombofcns']=[[self.refpathfilterfill], [self.filterfill, self.filterfill]]
+        d['slider'].setMaximum(len(d['parnames'])-1)
+        self.pardlist+=[copy.copy(d)]
+        QObject.connect(d['slider'], SIGNAL("sliderReleased()"), self.slidermoved1)
+        
+        d=self.calclayoutgen('C', ['D-U','(P-Q)/S'])
+        self.parLayout.addWidget(d['widget'])
+        d['savename']='sampleheatcapacity'
+        d['fcns']=[C_DU, C_PQS]
+        d['parnames']=[['D', 'U'], ['P', 'Q', 'S']]
+        d['segdkeys']=[['samplepowerperrate', 'sampleheatlossperrate'], ['samplepower', 'sampleheatloss', 'sampleheatrate']]
+        d['postcombofcns']=[self.filterfill, self.filterfill]
+        d['parcombofcns']=[[self.filterfill, self.filterfill], [self.filterfill, self.filterfill, self.filterfill]]
+        d['slider'].setMaximum(len(d['parnames'])-1)
+        self.pardlist+=[copy.copy(d)]
+        QObject.connect(d['slider'], SIGNAL("sliderReleased()"), self.slidermoved2)
+
+        return 3
+    
     def ExitRoutine(self):
         if self.saveCheckBox.isChecked():
             self.savefilters()
-            self.saveSCrecipe()
-            saveSCcalculations(self.h5path, self.h5expname, self.h5hpname, self.hpsegdlist)
+            if self.saveSCrecipe():
+                saveSCcalculations(self.h5path, self.h5expname, self.h5hpname, self.hpsegdlist, self.recname)
+            else:
+                QMessageBox.warning(self,"ERROR",  "data not saved")
+
     def savefilters(self):
         savefilters(self.h5path, self.h5expname, self.filterd)
     
     def saveSCrecipe(self):
-        recname=str(self.recLineEdit.text())
-        if len(recname)==0:
+        self.recname=str(self.recLineEdit.text())
+        if len(self.recname)==0:
             QMessageBox.warning(self,"ERROR",  "recipe name not valid")
             return False
         savefilters(self.h5path, self.h5expname, self.filterd)
@@ -216,7 +274,7 @@ class SCrecipeDialog(QDialog):
             recd['postfilter']=str(d['postcombo'].currentText())
             recd['savename']=d['savename']
             recdlist+=[recd]
-        saveSCrecipe(self.h5path, self.h5expname, recname, fcns, recdlist)
+        saveSCrecipe(self.h5path, self.h5expname, self.recname, fcns, recdlist)
         return True
         
     def calcall(self):
@@ -345,7 +403,7 @@ class SCrecipeDialog(QDialog):
             self.filterComboBox.insertItem(counter, nam)
         self.updateparwidgets()
         
-    def filterfill(self, cb, deriv=0):
+    def filterfill(self, cb, deriv=0, reqkeys=[]):
         dfltnam=str(cb.currentText())
         if dfltnam=='':
             dfltnam='None'
@@ -353,15 +411,21 @@ class SCrecipeDialog(QDialog):
         cb.clear()
         counter=0
         for nam, d in self.filterd.iteritems():
-            if d['SGderiv']==deriv:
-                cb.insertItem(counter, nam)
-                if nam==dfltnam:
-                    i=counter
-                counter+=1
+            if False in [k in d.keys() for k in reqkeys]:
+                continue
+            if ('SGderiv' in d.keys() and d['SGderiv']!=deriv) or (deriv>0 and not 'SGderiv' in d.keys()):
+                continue
+            cb.insertItem(counter, nam)
+            if nam==dfltnam:
+                i=counter
+            counter+=1
         cb.setCurrentIndex(i)
+
     def derfilterfill(self, cb):
         self.filterfill(cb, deriv=1)
-
+    
+    def refpathfilterfill(self, cb):
+        self.filterfill(cb, reqkeys=['REFh5path', 'REFalignment'])
     
     def dfltfilterdict(self, deriv=0):
         return {'OLnpts':1, \
@@ -379,6 +443,20 @@ class SCrecipeDialog(QDialog):
                 'SGorder':None, \
                 'SGderiv':0, \
                 }
+    
+    def Qfilterdict(self, h5pathstr):
+        attrs=geth5attrs(self.h5path, '/'.join((h5pathstr, 'sampleheatloss')))
+        d=self.Nonefilterdict()
+        d['kA']=attrs['kA']
+        d['esA']=attrs['esA']
+        return d
+        
+    def reffilterdict(self, h5pathstr):
+        d=self.Nonefilterdict()
+        d['REFh5path']=h5pathstr
+        d['REFalignment']='sampletemperature'
+        return d
+        
     def filterdicttypechanger(self, d):
         dfltd=self.dfltfilterdict()
         for k, v in d.iteritems():
@@ -632,11 +710,11 @@ class SCanalysisDialog(QDialog):#***
         return [count for count, d in enumerate(hpsegdlist) if d['segmenttype'] in segindsortypes]
         
     def calcall(self):
-        recname=str(self.recComboBox.currentText())
+        self.recname=str(self.recComboBox.currentText())
         hplist=self.readhpcb()
         h5file=h5py.File(self.h5path, mode='r')
         filterd=getfilterdict(h5file, self.h5expname)
-        f_saven_namsegkfilk_postfilk=getSCrecipe(h5file, self.h5expname, recname)
+        f_saven_namsegkfilk_postfilk=getSCrecipe(h5file, self.h5expname, self.recname)
         h5file.close()
         partups=[('fild', filterd)]
         partups+=[(a, b) for a, b in zip(['h5path', 'h5expname'], [self.h5path, self.h5expname])]
@@ -664,7 +742,7 @@ class SCanalysisDialog(QDialog):#***
                 self.plotdialog.drawall()
                 self.plotdialog.show()
                 self.plotdialog.activateWindow()
-            saveSCcalculations(self.h5path, self.h5expname, h5hpname, hpsegdlist)
+            saveSCcalculations(self.h5path, self.h5expname, h5hpname, hpsegdlist, self.recname)
 #        if not newfilterd:
 #            print 'error importing filters from ', h5exp
 #            return
@@ -954,7 +1032,7 @@ def S_Tavesl(segd, fild, dTdt, h5path, h5expname, h5hpname):#the I, dIdt, etc. s
     dTdt_=segd['~'.join(dTdt)]
     return dTdt_
 
-def Q_IV(segd, fild, I, V, dIdt, dVdt, h5path, h5expname, h5hpname):#the I, dIdt, etc. should be tuples with a key for segd and then a key for fild
+def D_IV(segd, fild, I, V, dIdt, dVdt, h5path, h5expname, h5hpname):#the I, dIdt, etc. should be tuples with a key for segd and then a key for fild
     RoToAl=RoToAl_h5(h5path, h5expname, h5hpname)
     dt=dt_h5(h5path, h5expname, h5hpname)
     for tup in [I, V, dIdt, dVdt]:
@@ -973,9 +1051,9 @@ def Q_IV(segd, fild, I, V, dIdt, dVdt, h5path, h5expname, h5hpname):#the I, dIdt
         V_=replacevalswithneighsin2nddim(V_, inds)
         dIdt_=replacevalswithneighsin2nddim(dIdt_, inds)
         dVdt_=replacevalswithneighsin2nddim(dVdt_, inds)
-    return Q_IVdIdV(I_, V_, dIdt_, dVdt_, RoToAl[0], RoToAl[2])
+    return D_IVdIdV(I_, V_, dIdt_, dVdt_, RoToAl[0], RoToAl[2])
 
-def Q_PS(segd, fild, P, S, h5path=None, h5expname=None, h5hpname=None):
+def D_PS(segd, fild, P, S, h5path=None, h5expname=None, h5hpname=None):
     for tup in [P, S]:
         (segkey, filkey)=tup
         if not '~'.join(tup) in segd.keys():
@@ -990,7 +1068,46 @@ def Q_PS(segd, fild, P, S, h5path=None, h5expname=None, h5hpname=None):
         S_=replacevalswithneighsin2nddim(S_, inds)
     return P_/S_
 
-
+def Q_T(segd, fild, T, h5path, h5expname, h5hpname):
+    T0=T0_h5(h5path, h5expname, h5hpname)
+    for tup in [T]:
+        (segkey, filkey)=tup
+        if not '~'.join(tup) in segd.keys():
+            segd['~'.join(tup)]=performgenericfilter(segd[segkey], fild[filkey])
+        #if True in [v>0 for k, v in fild[filkey].iteritems() if 'deriv' in k]: #this handle deriv filters other than SG but if the deriv is not wrt dt something needs to change
+        #    segd['~'.join(tup)]/=dt
+    Q=segd['~'.join(T)]#here the filter does the calculation
+    return Q
+#these need to be written Q_ref, Q_T, U_ref, U_QS, C_DU, C_PQS
+def U_QS(segd, fild, Q, S, h5path=None, h5expname=None, h5hpname=None):
+    for tup in [Q, dTdt]:
+        (segkey, filkey)=tup
+        if not '~'.join(tup) in segd.keys():
+            segd['~'.join(tup)]=performgenericfilter(segd[segkey], fild[filkey])
+        #if True in [v>0 for k, v in fild[filkey].iteritems() if 'deriv' in k]: #this handle deriv filters other than SG but if the deriv is not wrt dt something needs to change
+        #    segd['~'.join(tup)]/=dt
+    Q_=segd['~'.join(Q)]
+    dTdt_=segd['~'.join(dTdt)]
+    inds=numpy.where(dTdt_==0.)# these 3 lines will effectively remove neg and inf Res and replace them with the res value of the nearest acceptable value. These modification will no be reflected in the segd values for the source data
+    if len(inds[0])>0:
+        Q_=replacevalswithneighsin2nddim(Q_, inds)
+        dTdt_=replacevalswithneighsin2nddim(dTdt_, inds)
+    return Q_/dTdt_
+    
+def C_DU(segd, fild, D, U, h5path, h5expname=None, h5hpname=None):
+    for tup in [D, U]:
+        (segkey, filkey)=tup
+        if not '~'.join(tup) in segd.keys():
+            segd['~'.join(tup)]=performgenericfilter(segd[segkey], fild[filkey])
+            if True in ['REF' in k for k in fild[filkey].keys()]:
+                segd['~'.join(tup)]=performreferencesubtraction(segd, segkey, fild[filkey], h5path)
+        #if True in [v>0 for k, v in fild[filkey].iteritems() if 'deriv' in k]: #this handle deriv filters other than SG but if the deriv is not wrt dt something needs to change
+        #    segd['~'.join(tup)]/=dt
+    #next few lines takes care of reference - this could be automated/batch code but for now leave it as 1-offs because of unique math
+    delD_=segd['~'.join(D)]
+    delU_=segd['~'.join(U)]
+    return delD-delU
+    
 
 def filterattredit(parent, AttrDict, arr=None, title="Edit filter parameters. 'SG'= SavistkyGolay, 'OL'=OutLier"):#AttrDict is a pointer to a dictionary that may be changed
     repeat=True
@@ -1010,6 +1127,8 @@ def filterattredit(parent, AttrDict, arr=None, title="Edit filter parameters. 'S
         count+=1
     return True
 
+    
+    
 #p='C:/Users/JohnnyG/Documents/PythonCode/Vlassak/NanoCalorimetry/Nanocopeia1_PnSC.h5'
 ##p='C:/Users/JohnnyG/Documents/HarvardWork/pharma/PnSC/Nanocopeia1_PnSC.h5'
 #e='NoSampleRamps'

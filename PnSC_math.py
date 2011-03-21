@@ -54,9 +54,15 @@ def findlocmax(arr, critval=0.):
     return inds[0]+1
     
 
-def CalcR0_segdict(d, critrelstd=0.02, AveBeforeDivision=True):
+def CalcR0_segdict(d, critrelstd=0.02, AveBeforeDivision=True, dzero=None):
     amps=d['samplecurrent']#2d arrays of ncycles x npts
     volts=d['samplevoltage']
+    if not dzero is None:
+        i0=dzero['samplecurrent'].mean()
+        v0=dzero['samplevoltage'].mean()
+        print 'zero baseline of %.2e A, %.2e V subtracted' %(i0, v0)
+        amps=amps-i0
+        volts=volts-v0
     if AveBeforeDivision:
         ro_cycles=numpy.float32([v.mean()/a.mean() for a, v in zip(amps, volts)])
     else:
@@ -90,7 +96,7 @@ def temp_res(R, R0, T0, alpha):
 def dT_IVdIdV(I, V, dI, dV, R0, alpha):
     return (I*dV-V*dI)/alpha/R0/I**2
 
-def Q_IVdIdV(I, V, dI, dV, R0, alpha):
+def D_IVdIdV(I, V, dI, dV, R0, alpha):
     return V*I**3*R0*alpha/(I*dV-V*dI)
     
 def replacevalswithneighsin2nddim(arr, inds):

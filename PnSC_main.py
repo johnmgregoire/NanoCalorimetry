@@ -119,6 +119,7 @@ class MainMenu(QMainWindow):
         self.action_printdata=MainMenuQAction(self,'action_printdata', 'print Dataset values (select dataset or attribute)', self.menuplot, [('h5open', [True]), ('selectiontype', ['Dataset', 'Attr'])], self.ActionDict)
         self.action_plotmetadata=MainMenuQAction(self,'action_plotmetadata', 'Plot Heat Program MetaData(select heat program)', self.menuplot, [('h5open', [True]), ('selectiongrouptype', ['heatprogram'])], self.ActionDict)
         self.action_getsegd=MainMenuQAction(self,'action_getsegd', 'send SegDict to data (select a heat program)', self.menuplot, [('h5open', [True]), ('selectiongrouptype', ['heatprogram'])], self.ActionDict)
+        self.action_plotsegs=MainMenuQAction(self,'action_plotsegs', 'plot Segs by color (select a heat program)', self.menuplot, [('h5open', [True]), ('selectiongrouptype', ['heatprogram'])], self.ActionDict)
         self.action_viewSCanalysis=MainMenuQAction(self,'action_viewSCanalysis', 'SC data viewer (select a heat program)', self.menuplot, [('h5open', [True]), ('selectiongrouptype', ['heatprogram'])], self.ActionDict)
         
         
@@ -354,9 +355,13 @@ class MainMenu(QMainWindow):
             else:
                 print 'ERROR - NO SOAK SEGMENTS WERE FOUND - ONE IS REQUIRED FOR AN Ro HEAT PROGRAM'
                 return
+            if segtypelist.count('zero')>0:
+                dzero=dlist[segtypelist.index('zero')]
+            else:
+                dzero=None
             vals=[]
-            vals+=[CalcR0_segdict(dsoak, AveBeforeDivision=True)]
-            vals+=[CalcR0_segdict(dsoak, AveBeforeDivision=False)]
+            vals+=[CalcR0_segdict(dsoak, AveBeforeDivision=True, dzero=dzero)]
+            vals+=[CalcR0_segdict(dsoak, AveBeforeDivision=False, dzero=dzero)]
             vals+=[(vals[0]+vals[1])/2.]
             desc=['ratio of the means', 'mean of the ratios', 'Ave of these 2 values']
             choices=['%.4f : %s' %(v, d) for v, d in zip(vals, desc)]
@@ -427,7 +432,14 @@ class MainMenu(QMainWindow):
     def on_action_getsegd_triggered(self):
         pathlist=self.geth5selectionpath(liststyle=True)
         self.data=CreateHeatProgSegDictList(self.h5path, pathlist[1], pathlist[4])
-    
+
+    @pyqtSignature("")
+    def on_action_plotsegs_triggered(self):
+        pathlist=self.geth5selectionpath(liststyle=True)
+        self.data=CreateHeatProgSegDictList(self.h5path, pathlist[1], pathlist[4])
+        idialog=SegmentCyclePlot(self, self.data)
+        idialog.show()
+        
     @pyqtSignature("")
     def on_action_viewSCanalysis_triggered(self):
         pathlist=self.geth5selectionpath(liststyle=True)
