@@ -34,8 +34,11 @@ def createh5file(h5path):
 def readh5pyarray(arrpoint):
     return eval('arrpoint'+('['+':,'*len(arrpoint.shape))[:-1]+']')
     
-def create_exp_grp(h5path, h5expname):
-    h5file=h5py.File(h5path, mode='r+')
+def create_exp_grp(h5pf, h5expname):
+    if isinstance(h5pf, str):
+        h5file=h5py.File(h5pf, mode='r+')
+    else:
+        h5file=h5pf
     if 'Calorimetry' in h5file:
         h5cal=h5file['Calorimetry']
     else:
@@ -46,7 +49,8 @@ def create_exp_grp(h5path, h5expname):
     h5a=h5exp.create_group('analysis')
     h5m=h5exp.create_group('measurement')
     h5hp=h5m.create_group('HeatProgram')
-    h5file.close()
+    if isinstance(h5pf, str):
+        h5file.close()
     
 def writenewh5heatprogram(h5path, h5expname, grpname, AttrDict, DataSetDict, SegmentData):
     h5file=h5py.File(h5path, mode='r+')
@@ -57,7 +61,7 @@ def writenewh5heatprogram(h5path, h5expname, grpname, AttrDict, DataSetDict, Seg
     h5hpg.attrs['segment_ms']=SegmentData[0]
     h5hpg.attrs['segment_mA']=SegmentData[1]
     for k, v in AttrDict.iteritems():
-        print k, type(v), v
+        #print k, type(v), v
         h5hpg.attrs[k]=v
     for nam, (adict, data) in DataSetDict.iteritems():
         h5d=h5hpg.create_dataset(nam, data=data)
@@ -146,7 +150,7 @@ def msarr_hpgrp(h5hpgrp, twod=False):
 
 def segtypes():
     return ['step', 'soak', 'ramp', 'zero']
-def CreateHeatProgSegDictList(h5path, h5expname, h5hpname, critms_step=1., critmAperms_constmA=0.01, critmA_zero=0.1):
+def CreateHeatProgSegDictList(h5path, h5expname, h5hpname, critms_step=1., critmAperms_constmA=0.01, critdelmA_constmA=10., critmA_zero=0.1):
 #the segment types are step, soak, ramp, zero
 #the CreateHeatProgSegDictList function reads the data from the .h5 file and organizes in a way that will be useful for many types of analysis. 
 #the function returns a list where there is one dict for each segment in the heat program. Each dict value that is an array is assumed to be data and all have the same shape
@@ -163,7 +167,7 @@ def CreateHeatProgSegDictList(h5path, h5expname, h5hpname, critms_step=1., critm
     for count, (ms0, ms1, mA0, mA1) in enumerate(zip(segms[:-1], segms[1:], segmA[:-1], segmA[1:])):
         if (ms1-ms0)<=critms_step:
             d={'segmenttype':'step'}
-        elif numpy.abs((mA1-mA0)/(ms1-ms0))<critmAperms_constmA:
+        elif numpy.abs((mA1-mA0)/(ms1-ms0))<critmAperms_constmA and numpy.abs(mA1-mA0)<critdelmA_constmA:
             if (mA1+mA0)<2.*critmA_zero:
                 d={'segmenttype':'zero'}
             else:

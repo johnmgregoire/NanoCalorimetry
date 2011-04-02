@@ -659,6 +659,10 @@ class SCanalysisDialog(QDialog):#***
             self.segcalcnames+=['all segs']
             self.segcalcoptions+=[numpy.array(range(len(hpsegdlist)))]
         else:
+            hpsegdlist=CreateHeatProgSegDictList(self.h5path, self.h5expname, hplist[0])
+            for count, d in enumerate(hpsegdlist):
+                self.segcalcnames+=['segment %d : %s' %(count, d['segmenttype'])]
+                self.segcalcoptions+=[numpy.array([count])]
             self.segcalcnames+=['all ramp']
             self.segcalcoptions+=[['ramp']]
             self.segcalcnames+=['all soak']

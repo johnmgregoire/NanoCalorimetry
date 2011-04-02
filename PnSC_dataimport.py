@@ -8,28 +8,37 @@ from PnSC_ui import *
 from PnSC_math import *
 from PnSC_h5io import *
 
-def FileImport(parent, protocolname):
+def FileImport(parent, protocolname, batchattrdict=None):
     if 'PatDAQ' in protocolname:
         fn='.dat'
         ms='Select .dat text file'
     elif 'JimDAQ' in protocolname:
         fn='.csv'
         ms='Select a .csv text file from the any cycle'
-    p=mygetopenfile(parent=parent, markstr=ms, filename=fn)
+    if batchattrdict is None:
+        p=mygetopenfile(parent=parent, markstr=ms, filename=fn)
+    else:
+        p=batchattrdict['path']
+        
     if p=='':
         return False
-    print '***', FileFormatFunctionLibrary[protocolname]
-    ans=FileFormatFunctionLibrary[protocolname](parent, p)
+    ans=FileFormatFunctionLibrary[protocolname](parent, p, batchattrdict=batchattrdict)
     if not ans:
         return ans
     AttrDict, DataSetDict, SegmentData=ans
     AttrDict['importpath']=str(p)
     AttrDict['protocolname']=protocolname
-    if not importcheck(parent, AttrDict, title='Attributes of the Heat Program'):
-        return False
-    for nam, (d, arr) in DataSetDict.iteritems():
-        if not importcheck(parent, d, arr=arr, title='Dataset %s' %nam):
+    if batchattrdict is None:
+        if not importcheck(parent, AttrDict, title='Attributes of the Heat Program'):
             return False
+        for nam, (d, arr) in DataSetDict.iteritems():
+            if not importcheck(parent, d, arr=arr, title='Dataset %s' %nam):
+                return False
+    else:
+        for k in AttrDict.keys():
+            if k in batchattrdict.keys():
+                print 'replacing AttrDict key %s from %s to %s'  %(k, `AttrDict[k]`, `batchattrdict[k]`)
+                AttrDict[k]=copy.copy(batchattrdict[k])
     return AttrDict, DataSetDict, SegmentData
 
 def importcheck(parent, AttrDict, arr=None, title=''):#AttrDict is a pointer to a dictionary that may be changed
@@ -40,7 +49,6 @@ def importcheck(parent, AttrDict, arr=None, title=''):#AttrDict is a pointer to 
             title='PLEASE CONFIRM CHANGES! '+title
         idialog=attreditorDialog(parent, AttrDict, arr=arr, title=title)
         if not idialog.exec_():
-            print idialog
             return False
         if idialog.edited:
             for k, v in idialog.attrd.iteritems():
@@ -82,7 +90,7 @@ def JimDAQ_getcell(filepath):
         return 0
         
 #The data reading functions should return 3 things, 0: a dictionary containing the attr for the heat program group, 1: a dictionary with key=datasetname, and val=tuple with 0th element an attr dict and 1st element the array, 2:(ms array, mA array) for segments
-def JimDAQ_SC(parent, filepath):
+def JimDAQ_SC(parent, filepath, batchattrdict=None):
     dlist, arrlist=JimDAQ_fileiterator(filepath)
     arr=truncate_arrlist_shortest(arrlist)
     print arr.shape
@@ -235,7 +243,7 @@ def PatDAQ_extractlist(s):
     while len(c)>0:
         a, b, c=c.partition('_')
         nlist+=[a]
-    print nlist
+
     return [eval(n) for n in nlist if len(n)>0 and not (False in [nc.isdigit() for nc in n])]
 #print PatDAQ_filenamedecode('c:/2010Nov27_Cell5_1mA_50ms_500ms_Ro_10C.dat')
 
@@ -243,8 +251,6 @@ def readdat_PatDAQ(path):
     f=open(path, mode='r')
     lines=f.readlines()
     f.close()
-    
-    
     v=[]
     t=[]
     for i, l in enumerate(lines):
@@ -260,21 +266,34 @@ def readdat_PatDAQ(path):
 
     return numpy.float32(v).T
 
-def PatDAQ_SC(parent, filepath):
+def PatDAQ_SC(parent, filepath, batchattrdict=None):
     d, SegmentData, durationguess=PatDAQ_filenamedecode(filepath)
-    print '^', d, SegmentData, durationguess
     arr=readdat_PatDAQ(filepath)
     d['daqHz']=100000.
     d['operator']=''
     d['epoch']=os.path.getmtime(filepath)
-    print durationguess, arr.shape
+
     if durationguess is None:
         durationguess=arr.shape[1]
     else:
-        durationguess*=d['daqHz']/1000.
-    idialog=PatDAQCycleEditor(parent, arr[0], durationguess, os.path.split(filepath)[1])
-    if not idialog.exec_():
-        return False
+        durationguess*=d['daqHz']/1000.#durationguess from filename is in ms
+    if 'ncycles' in d.keys() and not (d['ncycles'] is None):
+        durationguess=int(round(1.*arr.shape[1]/d['ncycles']))
+
+    if batchattrdict is None:
+        idialog=PatDAQCycleEditor(parent, arr[0], durationguess, os.path.split(filepath)[1])
+        if not idialog.exec_():
+            return False
+    else:
+        if 'ncycles' in batchattrdict.keys() and not (batchattrdict['ncycles'] is None):
+            durationguess=int(round(1.*arr.shape[1]/batchattrdict['ncycles']))
+        idialog=PatDAQCycleEditor(parent, arr[0], durationguess, os.path.split(filepath)[1])
+        for sb, k in [(idialog.durSpinBox, 'durSpinBox'), (idialog.nnoiseSpinBox, 'nnoiseSpinBox'), (idialog.nsigSpinBox, 'nsigSpinBox'), (idialog.naboveSpinBox, 'naboveSpinBox')]:
+            if k in batchattrdict and not (batchattrdict[k] is None):
+                sb.setValue(batchattrdict[k])
+        idialog.calccycles()
+        idialog.ExitRoutine()
+
     temp=idialog.partition_array_triggers(arr[0])
     temp2=idialog.partition_array_triggers(arr[1])
     if temp is None or temp2 is None:
@@ -290,8 +309,87 @@ def PatDAQ_SC(parent, filepath):
     d['ambient_tempC']=20.
     return d, ds, SegmentData
 
+def readdat_PatDAQ2011(path):
+    f=open(path, mode='r')
+    lines=f.readlines()
+    f.close()
+    
+    def evalrow(l):
+        t=[]
+        l=l.strip().strip('\t')
+        while len(l)>0:
+            a, b, l=l.partition('\t')
+            t+=[a]
+        try:
+            v=numpy.array([eval(x) for x in t])
+        except:
+            v=t
+        if len(v)==1:
+            return v[0]
+        else:
+            return v
+    v=[]
+    d={}
+    for i, l in enumerate(lines):
+        if l.startswith('%'):
+            k, garb, s=l.partition('%')[2].partition(':')
+            if len(k)>0 and len(s)>0:
+                d[k]=evalrow(s)
+        else:
+            l=l.strip().strip('\t')
+            if len(l)>0:
+                v+=[evalrow(l)]
+    return d, numpy.float32(v).T
+
+def PatDAQ2011_SC(parent, filepath, batchattrdict=None):
+    durationguess=None
+    #SegmentData=?
+    d, arr=readdat_PatDAQ2011(filepath)
+    if not 'daqHz' in d.keys():
+        d['daqHz']=100000.
+    if not 'operator' in d.keys():
+        d['operator']=''
+    d['epoch']=os.path.getmtime(filepath)
+
+    if durationguess is None:
+        durationguess=arr.shape[1]
+    else:
+        durationguess*=d['daqHz']/1000.#durationguess from filename is in ms
+    if 'ncycles' in d.keys() and not (d['ncycles'] is None):
+        durationguess=int(round(1.*arr.shape[1]/d['ncycles']))
+
+    if batchattrdict is None:
+        idialog=PatDAQCycleEditor(parent, arr[0], durationguess, os.path.split(filepath)[1])
+        if not idialog.exec_():
+            return False
+    else:
+        if 'ncycles' in batchattrdict.keys() and not (batchattrdict['ncycles'] is None):
+            durationguess=int(round(1.*arr.shape[1]/batchattrdict['ncycles']))
+        idialog=PatDAQCycleEditor(parent, arr[0], durationguess, os.path.split(filepath)[1])
+        for sb, k in [(idialog.durSpinBox, 'durSpinBox'), (idialog.nnoiseSpinBox, 'nnoiseSpinBox'), (idialog.nsigSpinBox, 'nsigSpinBox'), (idialog.naboveSpinBox, 'naboveSpinBox')]:
+            if k in batchattrdict and not (batchattrdict[k] is None):
+                sb.setValue(batchattrdict[k])
+        idialog.calccycles()
+        idialog.ExitRoutine()
+
+    temp=idialog.partition_array_triggers(arr[0])
+    temp2=idialog.partition_array_triggers(arr[1])
+    if temp is None or temp2 is None:
+        QMessageBox.warning(self,"FAILED",  "ABORTED due to failure in partitioning data into cycles")
+        return False
+    mAcycles=temp[0]
+    Vcycles=temp2[0]
+    
+    d['ncycles']=mAcycles.shape[0]
+    ds={}
+    ds['samplecurrent']=({'Aunit':0.01}, mAcycles[:, :])
+    ds['samplevoltage']=({'Vunit':1.}, Vcycles[:, :])
+    d['ambient_tempC']=20.
+    return d, ds, SegmentData
+    
 FileFormatFunctionLibrary={\
                    'PatDAQ_SC':PatDAQ_SC, \
+                   'PatDAQ2011_SC':PatDAQ2011_SC, \
                    'JimDAQ_SC':JimDAQ_SC, \
 #                   'JimDAQ_DSC':JimDAQ_DSC, \
 #                   'JimDAQ_DTA':JimDAQ_DTA, \

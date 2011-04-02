@@ -51,7 +51,7 @@ def mygetdir(parent=None, xpath="%s" % os.getcwd(),markstr='' ):
     return unicode(QFileDialog.getExistingDirectory(parent,''.join(['Select directory:', markstr]), xpath))
 
 class fillh5tree():
-    def __init__(self, tree, h5file, showattrs=True):
+    def __init__(self, tree, h5file, showattrs=True, selectionpathlist=None):
         self.treeWidget=tree
         self.treeWidget.clear()
         
@@ -60,6 +60,18 @@ class fillh5tree():
         mainitem=QTreeWidgetItem([os.path.split(h5file.filename)[1]],  0)
         self.treeWidget.addTopLevelItem(mainitem)
         self.createTree(h5file, mainitem)
+        
+        if not selectionpathlist is None:
+            item=mainitem
+            for itemname in selectionpathlist:
+                chn=[item.child(i).text(0) for i in range(item.childCount())]
+                if itemname in chn:
+                    item.setExpanded(True)
+                    item=item.child(chn.index(itemname))
+                else:
+                    break
+            tree.setCurrentItem(item)
+
 
     def createTree(self, startnode, parentitem):
         #print startnode.name
@@ -247,7 +259,7 @@ class attreditorDialog(QDialog):
                 self.attrd[a]=c
                 print a,  ' updated to ',  `c`
                 self.edited=True
-            
+
 class SegmentCyclePlot(QDialog):
     def __init__(self, parent, SegmentData, markersize=2):
         super(SegmentCyclePlot, self).__init__(parent)
@@ -256,34 +268,74 @@ class SegmentCyclePlot(QDialog):
         
         cols=['k', 'y', 'b', 'm', 'g', 'c', 'r']*10#just to be sure there's enough
 
-        self.plotwlist=[[plotwidget(self) for j in range(3)] for i in range(2)]
-
+        self.plotw=plotwidget(self)
+        self.fig=self.plotw.fig
+        self.fig.clf()
+        self.plotwlist=[[self.fig.add_subplot(2, 3, i*3+j+1) for j in range(3)] for i in range(2)]
+        self.fig.subplots_adjust(left=.09, bottom=.1, right=.95, top=.92, wspace=.4, hspace=.3)
         self.markersize=markersize
         
         mainlayout=QGridLayout()
+        mainlayout.addWidget(self.plotw, 0, 0)
         for i, lab1 in enumerate(['samplecurrent', 'samplevoltage']):
-            for j, lab2 in enumerate(['first cycle', 'all cycles', '1st 6 and last (red) cycles']):
-                mainlayout.addWidget(self.plotwlist[i][j], i, j)
-                self.plotwlist[i][j].axes.set_xlabel('cycle time (ms)')
-                self.plotwlist[i][j].axes.set_ylabel(lab1)
-                self.plotwlist[i][j].axes.set_title(lab2)
+            for j, lab2 in enumerate(['1st cycle, %d segs' %len(SegmentData), 'all cycles', '1st 6 and last (red) cycles']):
+                self.plotwlist[i][j].set_xlabel('cycle time (s)')
+                self.plotwlist[i][j].set_ylabel(lab1)
+                self.plotwlist[i][j].set_title(lab2)
         for d, col in zip(SegmentData, cols):
             first=True
             for count, (i, v) in enumerate(zip(d['samplecurrent'], d['samplevoltage'])):
                 if first:
                     first=False
-                    self.plotwlist[0][0].axes.plot(d['cycletime'][0], i, col+'.', markersize=markersize)
-                    self.plotwlist[1][0].axes.plot(d['cycletime'][0], v, col+'.', markersize=markersize)
-                self.plotwlist[0][1].axes.plot(d['cycletime'][0], i, col+'.', markersize=markersize)
-                self.plotwlist[1][1].axes.plot(d['cycletime'][0], v, col+'.', markersize=markersize)
+                    self.plotwlist[0][0].plot(d['cycletime'][0], i, col+'.', markersize=markersize)
+                    self.plotwlist[1][0].plot(d['cycletime'][0], v, col+'.', markersize=markersize)
+                self.plotwlist[0][1].plot(d['cycletime'][0], i, col+'.', markersize=markersize)
+                self.plotwlist[1][1].plot(d['cycletime'][0], v, col+'.', markersize=markersize)
                 if count<6 or count==(d['samplecurrent'].shape[0]-1):
                     if count<6:
                         col2=cols[count]
                     else:
                         col2=cols[6]
-                    self.plotwlist[0][2].axes.plot(d['cycletime'][0], i, col2+'.', markersize=markersize)
-                    self.plotwlist[1][2].axes.plot(d['cycletime'][0], v, col2+'.', markersize=markersize)
+                    self.plotwlist[0][2].plot(d['cycletime'][0], i, col2+'.', markersize=markersize)
+                    self.plotwlist[1][2].plot(d['cycletime'][0], v, col2+'.', markersize=markersize)
         self.setLayout(mainlayout)
+        
+#class SegmentCyclePlot(QDialog):
+#    def __init__(self, parent, SegmentData, markersize=2):
+#        super(SegmentCyclePlot, self).__init__(parent)
+#
+#        self.setWindowTitle('segments by color and cycles by color')
+#        
+#        cols=['k', 'y', 'b', 'm', 'g', 'c', 'r']*10#just to be sure there's enough
+#
+#        self.plotwlist=[[plotwidget(self) for j in range(3)] for i in range(2)]
+#
+#        self.markersize=markersize
+#        
+#        mainlayout=QGridLayout()
+#        for i, lab1 in enumerate(['samplecurrent', 'samplevoltage']):
+#            for j, lab2 in enumerate(['first cycle', 'all cycles', '1st 6 and last (red) cycles']):
+#                mainlayout.addWidget(self.plotwlist[i][j], i, j)
+#                self.plotwlist[i][j].axes.set_xlabel('cycle time (ms)')
+#                self.plotwlist[i][j].axes.set_ylabel(lab1)
+#                self.plotwlist[i][j].axes.set_title(lab2)
+#        for d, col in zip(SegmentData, cols):
+#            first=True
+#            for count, (i, v) in enumerate(zip(d['samplecurrent'], d['samplevoltage'])):
+#                if first:
+#                    first=False
+#                    self.plotwlist[0][0].axes.plot(d['cycletime'][0], i, col+'.', markersize=markersize)
+#                    self.plotwlist[1][0].axes.plot(d['cycletime'][0], v, col+'.', markersize=markersize)
+#                self.plotwlist[0][1].axes.plot(d['cycletime'][0], i, col+'.', markersize=markersize)
+#                self.plotwlist[1][1].axes.plot(d['cycletime'][0], v, col+'.', markersize=markersize)
+#                if count<6 or count==(d['samplecurrent'].shape[0]-1):
+#                    if count<6:
+#                        col2=cols[count]
+#                    else:
+#                        col2=cols[6]
+#                    self.plotwlist[0][2].axes.plot(d['cycletime'][0], i, col2+'.', markersize=markersize)
+#                    self.plotwlist[1][2].axes.plot(d['cycletime'][0], v, col2+'.', markersize=markersize)
+#        self.setLayout(mainlayout)
 
 class SegmentEditor(QDialog):
     def __init__(self, parent, SegmentData, cycledata, maxpts=9, markersize=2):
@@ -309,18 +361,18 @@ class SegmentEditor(QDialog):
         firstderptsLabel.setText('num pts/n1st der')
         self.firstderptsSpinBox=QSpinBox()
         self.firstderptsSpinBox.setRange(5, 101)
-        self.firstderptsSpinBox.setValue(7)
+        self.firstderptsSpinBox.setValue(15)
 
         secderptsLabel=QLabel()
         secderptsLabel.setText('num pts/n2nd der')
         self.secderptsSpinBox=QSpinBox()
         self.secderptsSpinBox.setRange(5, 101)
-        self.secderptsSpinBox.setValue(15)
+        self.secderptsSpinBox.setValue(30)
 
         secdervalLabel=QLabel()
         secdervalLabel.setText('crit val\n2nd der')
         self.secdervalSpinBox=QDoubleSpinBox()
-        self.secdervalSpinBox.setDecimals(4)
+        self.secdervalSpinBox.setDecimals(8)
         self.secdervalSpinBox.setValue(0.003)
         
 #        segcalcrowLabel=QLabel()
@@ -607,14 +659,17 @@ class PatDAQCycleEditor(QDialog):
             v0=noisevals.mean()
             v1=noisevals.std()*self.nsig
             abovebool=(self.mA[i0:i1]-v0)>v1
-            trig=False
-            for i in numpy.where(abovebool)[0]:
-                trig=(i+self.nabove)<len(abovebool) and numpy.all(abovebool[i:i+self.nabove])
-                if trig:
-                    break
-            if not trig:
-                QMessageBox.warning(self,"FAILED",  "ABORTED because no trigger found in cycle %d" %counter)
-                return
+            if len(self.cycind)==1: #if only one cycle dont' search for trigger
+                i=0
+            else:
+                trig=False
+                for i in numpy.where(abovebool)[0]:
+                    trig=(i+self.nabove)<len(abovebool) and numpy.all(abovebool[i:i+self.nabove])
+                    if trig:
+                        break
+                if not trig:
+                    QMessageBox.warning(self,"FAILED",  "ABORTED because no trigger found in cycle %d" %counter)
+                    return
             self.triggind+=[i0+i]
             self.preoverlaplength=min(self.preoverlaplength, i)
             self.overlaplength=min(self.overlaplength, i1-(i0+i))
@@ -676,7 +731,6 @@ class PatDAQCycleEditor(QDialog):
                     self.plotw.axes.plot(segi, s, c+'x', ms=self.markersize)
                     maxval=max([maxval, max(s)])
                     minval=min([minval, min(s)])
-                    print '@@', minval
             self.plotw.axes.plot(range(len(arr)), arr, c+'.', ms=self.markersize)
         self.plotw.axes.plot([.5, .5], [minval, maxval], 'k-')
         self.plotw.axes.plot([len(arr)-.5, len(arr)-.5], [minval, maxval], 'k-')
@@ -755,7 +809,7 @@ class rescalDialog(QDialog):
     def __init__(self, parent, h5path):
         super(rescalDialog, self).__init__(parent)
         
-        self.arrComboBoxlist=[QComboBox() for i in range(3)]
+        self.arrComboBoxlist=[QComboBox() for i in range(4)]
         self.dfltSpinBoxlist=[QDoubleSpinBox() for i in range(3)]
         self.useaveCheckBoxlist=[QCheckBox() for i in range(2)]
         for sb, n in zip(self.dfltSpinBoxlist, [2, 2, 5]):
@@ -771,20 +825,23 @@ class rescalDialog(QDialog):
         l2.setText('Use const Ro,To\nfor all cells:')
         l3=QLabel()
         l3.setText('Use const dR/dT\nfor all cells:')
+        l4=QLabel()
+        l4.setText('Ave Ro with:')
         
         mainlayout=QGridLayout()
         mainlayout.addWidget(l0, 0, 0, 4, 1)
         mainlayout.addWidget(l1, 4, 0, 4, 1)
-        for w, n in zip(self.arrComboBoxlist, [0, 4, 6]):
-            mainlayout.addWidget(w, n, 1, 1, 1)
+        
+        for w, n, n2 in zip(self.arrComboBoxlist, [0, 1, 4, 6], [1, 3, 1, 1]):
+            mainlayout.addWidget(w, n, n2, 1, 1)
         mainlayout.addWidget(l2, 0, 2, 2, 1)
         mainlayout.addWidget(l3, 4, 2, 2, 1)
+        mainlayout.addWidget(l4, 0, 3, 1, 1)
         for w, n in zip(self.dfltSpinBoxlist, [2, 3, 6]):
             mainlayout.addWidget(w, n, 2, 1, 1)
-        for w, n in zip(self.useaveCheckBoxlist, [0, 4]):
-            mainlayout.addWidget(w, n, 3, 4, 1)
-            
-            
+        for w, n in zip(self.useaveCheckBoxlist, [2, 6]):
+            mainlayout.addWidget(w, n, 3, 2, 1)
+
         self.buttonBox = QDialogButtonBox(self)
         #self.buttonBox.setGeometry(QRect(520, 195, 160, 26))
         self.buttonBox.setOrientation(Qt.Horizontal)
@@ -810,6 +867,8 @@ class rescalDialog(QDialog):
                     cb.insertItem(counter, (grp.name).rpartition('/')[2])
                 self.arrpathlist+=[grp['analysis/CellResistance'].name]
                 counter+=1
+        self.arrComboBoxlist[1].insertItem(999, 'None')
+        self.arrComboBoxlist[1].setCurrentIndex(999)
         self.h5file.close()
     def calcansave(self):
         self.h5file=h5py.File(self.h5path, mode='r+')
@@ -817,7 +876,7 @@ class rescalDialog(QDialog):
         Rdfltbool=sbvals[0]>0. or len(self.arrpathlist)==0
         Adfltbool=sbvals[2]>0. or len(self.arrpathlist)==0
         
-        pnts=[self.h5file[self.arrpathlist[cb.currentIndex()]] for cb in self.arrComboBoxlist if len(self.arrpathlist)>0]
+        pnts=[(cb.currentIndex()<len(self.arrpathlist) and (self.h5file[self.arrpathlist[cb.currentIndex()]],) or (None,))[0] for cb in self.arrComboBoxlist if len(self.arrpathlist)>0]
         
         savearr=numpy.zeros((len(self.h5file.attrs['cells']), 3), dtype='float32')
         if Rdfltbool:
@@ -831,7 +890,16 @@ class rescalDialog(QDialog):
             grp=getcalanalysis(self.h5file, names[idialog.index])
         else:
             grp=pnts[0].parent
-            savearr[:, 0]=pnts[0][:]
+            if pnts[1] is None:
+                r=pnts[0][:]
+            else:
+                r0=pnts[0][:]
+                r1=pnts[1][:]
+                b0=numpy.float32(r0>0.)
+                b1=numpy.float32(r1>0.)
+                r=numpy.zeros(len(r0), dtype='float32')
+                r[(b0+b1)>0]=((r0+r1)/(b0+b1))[(b0+b1)>0]
+            savearr[:, 0]=r[:]
             savearr[:, 1]=pnts[0].attrs['ambient_tempC']
             if self.useaveCheckBoxlist[0].isChecked():
                 inds=numpy.where(savearr[:, 0]<=0.)
@@ -841,10 +909,10 @@ class rescalDialog(QDialog):
         if Adfltbool:
             savearr[:, 2]=sbvals[2]
         else:
-            r1=pnts[1][:]
-            t1=pnts[1].attrs['ambient_tempC']
-            r2=pnts[2][:]
-            t2=pnts[2].attrs['ambient_tempC']
+            r1=pnts[2][:]
+            t1=pnts[2].attrs['ambient_tempC']
+            r2=pnts[3][:]
+            t2=pnts[3].attrs['ambient_tempC']
             
             inds=numpy.where((r1>0.) & (r2>0.) & (t2!=t1))
             savearr[inds, 2]=tcr(r2[inds], r1[inds], t2[inds], t1[inds])
@@ -858,6 +926,9 @@ class rescalDialog(QDialog):
             del grp['Res_TempCal']
         ds=grp.create_dataset('Res_TempCal', data=savearr)
         ds.attrs['doc']='numpts x 3 array where the 3 are R0, T0 and alpha'
+        ds.attrs['Ro']=pnts[0].name
+        if not pnts[1] is None:
+            ds.attrs['Rovaluesaveragedwith']=pnts[1].name
         self.h5file.close()
 
 class simpleplotDialog(QDialog):

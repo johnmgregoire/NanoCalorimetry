@@ -46,7 +46,7 @@ from PyQt4.QtGui import *
 #        print 'init h5'
         
 class MainMenu(QMainWindow):
-    def __init__(self):#, TreeWidg):
+    def __init__(self, previousmm):#, TreeWidg):
         super(MainMenu, self).__init__(None)
         #self.setupUi(self)
         self.setWindowTitle('Vlassak Group PnSC Analysis')
@@ -85,6 +85,15 @@ class MainMenu(QMainWindow):
         self.expandexceptPushButton.setText('Expand Groups')
         QObject.connect(self.expandexceptPushButton, SIGNAL("pressed()"), self.expandgrouptree)
         
+        if not previousmm is None:
+            oldselection=mm.geth5selectionpath(liststyle=True, removeformatting=False)
+            self.h5path=previousmm.h5path
+            h5file=h5py.File(self.h5path, mode='r')
+            fillh5tree(self.treeWidget, h5file, selectionpathlist=oldselection)
+            h5file.close()
+            self.statusdict['h5open']=True
+            self.actionenable()
+        
     def setupmenu(self):
         self.setObjectName("MainMenu")
         self.main_menu_pulldown = QMenuBar(self)
@@ -101,10 +110,11 @@ class MainMenu(QMainWindow):
         #setup a menu item in a menu section.    self.<NAME>=....,(self, <NAME>, <text>, <self.menufileio>, <list of tuples, tuple is name of requirement and list of acceptable values>, self.ActionDict), keep this last item the same
         self.action_openh5=MainMenuQAction(self,'action_openh5', 'open h5 file', self.menufileio, [], self.ActionDict)
         self.action_importscdata=MainMenuQAction(self,'action_importscdata', 'import calorimetry data', self.menufileio, [('h5open', [True])], self.ActionDict)
-        
+        self.action_batchimportscdata=MainMenuQAction(self,'action_batchimportscdata', 'batch import calorimetry data setup', self.menufileio, [('h5open', [True])], self.ActionDict)
         self.action_createh5=MainMenuQAction(self,'action_createh5', 'new h5 file', self.menufileio, [], self.ActionDict)
         self.action_createexpgrp=MainMenuQAction(self,'action_createexpgrp', 'new experiment group', self.menufileio, [('h5open', [True])], self.ActionDict)
-        self.action_delexpgrp=MainMenuQAction(self,'action_delexpgrp', 'DELETE experiment group', self.menufileio, [('h5open', [True])], self.ActionDict)
+        self.action_delh5grp=MainMenuQAction(self,'action_delh5grp', 'DELETE selected group', self.menufileio, [('h5open', [True]), ('selectiontype', ['Group'])], self.ActionDict)
+        #self.action_delexpgrp=MainMenuQAction(self,'action_delexpgrp', 'DELETE experiment group', self.menufileio, [('h5open', [True])], self.ActionDict)
         self.action_editattrs=MainMenuQAction(self,'action_editattrs', 'Edit import attrs (select a heat program)', self.menufileio, [('h5open', [True]), ('selectiongrouptype', ['heatprogram'])], self.ActionDict)
         
         #setup a menu section
@@ -159,10 +169,11 @@ class MainMenu(QMainWindow):
             self.statusdict['h5open']=True
             self.actionenable()
             
+
     def expandgrouptree(self):
         self.expandtree(groupsonly=True)
     def expandtree(self, groupsonly=False):
-        def expandchildren(item):
+        def expandchildren(item):#recursive
             for i in range(item.childCount()):
                 child=item.child(i)
                 if not groupsonly or True in [not ('(' in child.child(j).text(0) or str(child.child(j).text(0)).startswith("'")) for j in range(child.childCount())]:
@@ -172,7 +183,17 @@ class MainMenu(QMainWindow):
             item=self.treeWidget.topLevelItem(i) 
             item.setExpanded(True)
             expandchildren(item)
-       
+    
+    def settreeselection_list(self, selectionpathlist):
+        item=self.treeWidget.topLevelItem(0)
+        for itemname in selectionpathlist:
+            chn=[item.child(i).text(0) for i in range(item.childCount())]
+            if itemname in chn:
+                item.setExpanded(True)
+                item=item.child(chn.index(itemname))
+            else:
+                break
+        self.treeWidget.setCurrentItem(item)
     def actionenable(self):
         for aname, ad in self.ActionDict.iteritems():
             ad['ref'].setDisabled(False in [(k in self.statusdict.keys()) and (self.statusdict[k] in vals) for k, vals in ad['enable_reqs']])
@@ -180,18 +201,21 @@ class MainMenu(QMainWindow):
 #                print [(k in self.statusdict.keys()) and (self.statusdict[k] in vals) for k, vals in ad['enable_reqs']]
 #                print [(k, vals) for k, vals in ad['enable_reqs']]
 
-    def h5nodename_treeitem(self, treeitem):
-        return ((str(treeitem.text(0)).partition(':')[0]).partition('(')[0]).strip("'")
+    def h5nodename_treeitem(self, treeitem, removeformatting=True):
+        if removeformatting:
+            return ((str(treeitem.text(0)).partition(':')[0]).partition('(')[0]).strip("'")
+        else:
+            return str(treeitem.text(0))
 
-    def geth5selectionpath(self, liststyle=False):
+    def geth5selectionpath(self, liststyle=False, removeformatting=True):
         treeitem=self.currenttreeitem
         attrname=None
         if self.statusdict['selectiontype']=='Attr':
-            attrname=self.h5nodename_treeitem(treeitem)
+            attrname=self.h5nodename_treeitem(treeitem, removeformatting=removeformatting)
             treeitem=treeitem.parent()
         s=[]
         while not treeitem.parent() is None:
-            s=[self.h5nodename_treeitem(treeitem)]+s
+            s=[self.h5nodename_treeitem(treeitem, removeformatting=removeformatting)]+s
             treeitem=treeitem.parent()
         if not liststyle:
             s='/'.join((s))
@@ -284,7 +308,16 @@ class MainMenu(QMainWindow):
     def on_action_editattrs_triggered(self):
         path=self.geth5selectionpath(liststyle=False)
         editattrs(self, self.h5path, path)
-    
+
+    @pyqtSignature("")
+    def on_action_delh5grp_triggered(self):
+        h5file=h5py.File(self.h5path, mode='r+')
+        del h5file[self.geth5selectionpath(liststyle=False)]
+        h5file.close()
+        h5file=h5py.File(self.h5path, mode='r')
+        fillh5tree(self.treeWidget, h5file)
+        h5file.close()
+        
     @pyqtSignature("")
     def on_action_delexpgrp_triggered(self):
         h5file=h5py.File(self.h5path, mode='r+')
@@ -298,44 +331,84 @@ class MainMenu(QMainWindow):
         fillh5tree(self.treeWidget, h5file)
         h5file.close()
 
+    def batchrun_files(self, folder, startsendswith=('', ''), skiperrors=False):
+        for fn in os.listdir(folder):
+            if not (fn.startswith(startsendswith[0]) and fn.endswith(startsendswith[1])):
+                continue
+            p=os.path.join(folder, fn)
+            self.batchattrdict['path']=p
+            print 'running ', p
+            if skiperrors:
+                try:
+                    self.batchfcn(batchattrdict=self.batchattrdict)
+                except:
+                    print 'ERROR IMPORTING ', p
+            else:
+                self.batchfcn(batchattrdict=self.batchattrdict)
+            
     @pyqtSignature("")
-    def on_action_importscdata_triggered(self):
-        h5file=h5py.File(self.h5path, mode='r')
-        sgd=selectgroupDialog(self, h5file['Calorimetry'], title='Select h5 experiment group for import')
-        if not sgd:
+    def on_action_batchimportscdata_triggered(self, batchattrdict=None):
+        self.batchfcn=self.on_action_importscdata_triggered
+        self.batchattrdict={}
+        for k in ['grpname', 'protname','path','durSpinBox','nnoiseSpinBox', 'naboveSpinBox', 'nsigSpinBox', 'firstderptsSpinBox','secderptsSpinBox','secdervalSpinBox','savegrpname']:
+            self.batchattrdict[k]=None
+
+    @pyqtSignature("")
+    def on_action_importscdata_triggered(self, batchattrdict=None):
+        if batchattrdict is None:
+            h5file=h5py.File(self.h5path, mode='r')
+            sgd=selectgroupDialog(self, h5file['Calorimetry'], title='Select h5 experiment group for import')
+            if not sgd:
+                h5file.close()
+                return
             h5file.close()
-            return
-        h5file.close()
-        h5expname=sgd.grpname
-        
-        idialog=selectorDialog(self, FileFormatFunctionLibrary.keys(), title='Select data import protocol')
-        if not idialog.exec_():
-            return
-        protname=idialog.name
-        ans=FileImport(self,protname)
-        print ans
+            h5expname=sgd.grpname
+            idialog=selectorDialog(self, FileFormatFunctionLibrary.keys(), title='Select data import protocol')
+            if not idialog.exec_():
+                return
+            protname=idialog.name
+        else:
+            h5expname=batchattrdict['grpname']
+            protname=batchattrdict['protname']
+        ans=FileImport(self, protname, batchattrdict=batchattrdict)
+        #print ans
         if not ans:
             return
         AttrDict, DataSetDict, SegmentData=ans
         mA=DataSetDict['samplecurrent'][1][0]*DataSetDict['samplecurrent'][0]['Aunit']*1000.
         ms=1000.*numpy.float32(range(len(mA)))/AttrDict['daqHz']
         idialog=SegmentEditor(self, SegmentData, cycledata=(ms, mA))
-        if not idialog.exec_():
-            return
+        if batchattrdict is None:
+            if not idialog.exec_():
+                return
+        else:
+            for sb, k in [(idialog.firstderptsSpinBox, 'firstderptsSpinBox'), (idialog.secderptsSpinBox, 'secderptsSpinBox'), (idialog.secdervalSpinBox, 'secdervalSpinBox')]:
+                if k in batchattrdict and not (batchattrdict[k] is None):
+                    sb.setValue(batchattrdict[k])
+            idialog.findsegs()
+            idialog.ExitRoutine()
         SegmentData=idialog.SegmentData
         
         idialog=lineeditDialog(self, title='Enter name for h5 group', deftext=os.path.splitext(os.path.split(AttrDict['importpath'])[1])[0])
-        if not idialog.exec_():
-            return
-        grpname=idialog.text
+        if batchattrdict is None:
+            if not idialog.exec_():
+                return
+            grpname=idialog.text
+        else:
+            grpname=os.path.splitext(os.path.split(AttrDict['importpath'])[1])[0]
+            if 'savegrpname' in batchattrdict and not batchattrdict['savegrpname'] is None:
+                grpname=batchattrdict['savegrpname']
         
         writenewh5heatprogram(self.h5path, h5expname, grpname, AttrDict, DataSetDict, SegmentData)
+        
+        oldselection=['Calorimetry', h5expname, 'measurement', 'HeatProgram', grpname]
+        
         h5file=h5py.File(self.h5path, mode='r')
-        fillh5tree(self.treeWidget, h5file)
+        fillh5tree(self.treeWidget, h5file, selectionpathlist=oldselection)
         h5file.close()
         
     @pyqtSignature("")
-    def on_action_calcresistance_triggered(self):
+    def on_action_calcresistance_triggered(self, critms_step=1., critmAperms_constmA=0.01, critdelmA_constmA=10., critmA_zero=0.1):
         pathlist=self.geth5selectionpath(liststyle=True)
         if self.statusdict['selectiongrouptype']=='experiment':
             h5file, hplist=experimenthppaths(self.h5path, pathlist[1])
@@ -344,8 +417,8 @@ class MainMenu(QMainWindow):
         else:
             hplist=[pathlist[4]]
         for hp in hplist:
-            print hp
-            dlist=CreateHeatProgSegDictList(self.h5path, pathlist[1], hp) 
+            #print hp
+            dlist=CreateHeatProgSegDictList(self.h5path, pathlist[1], hp, critms_step=critms_step, critmAperms_constmA=critmAperms_constmA, critdelmA_constmA=critdelmA_constmA, critmA_zero=critmA_zero) 
             segtypelist=[d['segmenttype'] for d in dlist]
             if segtypelist.count('soak')==1:
                 dsoak=dlist[segtypelist.index('soak')]
@@ -359,31 +432,38 @@ class MainMenu(QMainWindow):
                 dzero=dlist[segtypelist.index('zero')]
             else:
                 dzero=None
-            vals=[]
-            vals+=[CalcR0_segdict(dsoak, AveBeforeDivision=True, dzero=dzero)]
-            vals+=[CalcR0_segdict(dsoak, AveBeforeDivision=False, dzero=dzero)]
-            vals+=[(vals[0]+vals[1])/2.]
-            desc=['ratio of the means', 'mean of the ratios', 'Ave of these 2 values']
-            choices=['%.4f : %s' %(v, d) for v, d in zip(vals, desc)]
-            idialog=selectorDialog(self, choices, title='select value of R0 to use')
-            if not idialog.exec_():
-                return
-            R0=vals[idialog.index]
+#            vals=[]
+#            vals+=[CalcR0_segdict(dsoak, AveBeforeDivision=True, dzero=dzero)]
+#            vals+=[CalcR0_segdict(dsoak, AveBeforeDivision=False, dzero=dzero)]
+#            vals+=[(vals[0]+vals[1])/2.]
+#            desc=['ratio of the means', 'mean of the ratios', 'Ave of these 2 values']
+#            choices=['%.4f : %s' %(v, d) for v, d in zip(vals, desc)]
+#            idialog=selectorDialog(self, choices, title='select value of R0 to use')
+#            if not idialog.exec_():
+#                return
+#            R0=vals[idialog.index]
+            R0=CalcR0_segdict(dsoak, AveBeforeDivision=True, dzero=dzero)
             writecellres(self.h5path, pathlist[1], hp, R0)
+        oldselection=self.geth5selectionpath(liststyle=True, removeformatting=False)
         h5file=h5py.File(self.h5path, mode='r')
-        fillh5tree(self.treeWidget, h5file)
+        fillh5tree(self.treeWidget, h5file, selectionpathlist=oldselection)
         h5file.close()
     
     @pyqtSignature("")
     def on_action_setuprescal_triggered(self):
         idialog=rescalDialog(self, self.h5path)
         idialog.exec_()
+        oldselection=self.geth5selectionpath(liststyle=True, removeformatting=False)
+        h5file=h5py.File(self.h5path, mode='r')
+        fillh5tree(self.treeWidget, h5file, selectionpathlist=oldselection)
+        h5file.close()
 
     @pyqtSignature("")
     def on_action_assignrescal_triggered(self):
         rescalpath_getorassign(self.h5path, self.statusdict['selectionname'], parent=self, forceassign=True)
+        oldselection=self.geth5selectionpath(liststyle=True, removeformatting=False)
         h5file=h5py.File(self.h5path, mode='r')
-        fillh5tree(self.treeWidget, h5file)
+        fillh5tree(self.treeWidget, h5file, selectionpathlist=oldselection)
         h5file.close()
         self.actionenable()
 
@@ -439,6 +519,7 @@ class MainMenu(QMainWindow):
         self.data=CreateHeatProgSegDictList(self.h5path, pathlist[1], pathlist[4])
         idialog=SegmentCyclePlot(self, self.data)
         idialog.show()
+        return idialog
         
     @pyqtSignature("")
     def on_action_viewSCanalysis_triggered(self):
@@ -465,6 +546,10 @@ class MainMenu(QMainWindow):
         pathlist=self.geth5selectionpath(liststyle=True)
         idialog=SCrecipeDialog(self, self.h5path, pathlist[1], pathlist[4])
         idialog.show()
+        oldselection=self.geth5selectionpath(liststyle=True, removeformatting=False)
+        h5file=h5py.File(self.h5path, mode='r')
+        fillh5tree(self.treeWidget, h5file, selectionpathlist=oldselection)
+        h5file.close()
 
     @pyqtSignature("")
     def on_action_applyscrecipe_triggered(self):
@@ -475,6 +560,10 @@ class MainMenu(QMainWindow):
             h5hpdflt=None
         idialog=SCanalysisDialog(self, self.h5path, pathlist[1], h5hpdflt=h5hpdflt)
         idialog.show()
+        oldselection=self.geth5selectionpath(liststyle=True, removeformatting=False)
+        h5file=h5py.File(self.h5path, mode='r')
+        fillh5tree(self.treeWidget, h5file, selectionpathlist=oldselection)
+        h5file.close()
 
 class MainMenuQAction(QAction):
     def __init__(self, parent, actionname, actiontext, hostmenu, reqs, adict):
@@ -496,14 +585,14 @@ class MainMenuQAction(QAction):
 
 
 
-def start():
+def start(previousmm=None):
     mainapp=QApplication(sys.argv)
 
     #TW=TreeWindow()
     #TW.show()
 
     #form=MainMenu(TW.treeWidget)
-    form=MainMenu()
+    form=MainMenu(previousmm)
     form.show()
     form.setFocus()
     global PARENT

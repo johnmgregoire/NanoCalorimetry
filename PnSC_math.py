@@ -1,4 +1,4 @@
-import numpy
+import numpy, scipy
 import h5py
 import os, os.path, time, copy
 
@@ -27,6 +27,89 @@ def savgolsmooth(x, nptsoneside=7, order = 4, dx=1.0, deriv=0): #based on scipy 
     smooth_data=[numpy.array([(weight * s[i + offset]) for offset, weight in offset_data]).sum() for i in xrange(side, len(s) - side)]
     smooth_data=numpy.array(smooth_data)/(dx**deriv)
     return smooth_data
+
+class fitfcns:
+    #.finalparams .sigmas .parnames useful, returns fitfcn(x)
+    def genfit(self, fcn, initparams, datatuple, markstr='unspecified', parnames=[], interaction=0,  maxfev=2000, weights=None):
+        self.maxfev=maxfev
+        self.performfit=True
+        self.initparams=initparams
+        self.sigmas=scipy.zeros(len(initparams))
+        self.parnames=parnames
+        self.finalparams=initparams
+        self.error=False
+        if weights is None:
+            def wts(x):
+                return 1
+        elif weights=='parabolic':
+            a=(datatuple[0][0]+datatuple[0][-1])/2.0
+            b=(datatuple[0][-1]-datatuple[0][0])/2.0
+            def wts(x):
+                return 1.0+((x-a)/b)**2
+
+        def res1(p, x1, y):
+            return (y-fcn(p, x1))*wts(x1)
+
+        def res2(p, x1,x2,y):
+            return y-fcn(p, x1, x2)
+
+        def res3(p, x1,x2,x3, y):
+            return y-fcn(p, x1, x2, x3)
+
+        def res4(p, x1,x2,x3,x4,  y):
+            return y-fcn(p, x1, x2, x3, x4)
+
+        resdic={1:res1,  2:res2,  3:res3,  4:res4}
+
+        i=0
+        for arr in datatuple:  #if the numerical data is given as a list or tuple then convert to arrays. regardless convert to float64 because leastsq REQUIRES THIS
+            datatuple=datatuple[0:i]+tuple([numpy.float64(arr)])+datatuple[i+1:]
+            i=i+1
+        while self.performfit:
+            fitout = scipy.optimize.leastsq(resdic[len(datatuple)-1],self.initparams, args=datatuple, maxfev=self.maxfev, full_output=1, warning=False)
+            self.performfit=False
+
+            if fitout[4]!=1:
+                print 'Fitting Error at ', markstr,': ', fitout[3]
+                self.error=True
+            else:
+                self.finalparams=fitout[0]
+                self.covmat=fitout[1]
+                self.sigmas=scipy.array([self.covmat[i, i] for i in range(len(self.sigmas))])
+
+        def fitfcn(x):
+            return fcn(self.finalparams, x)
+        return fitfcn
+
+    def poly(self, p, x):#both must be numpy arrays
+        return numpy.array([p[i]*(x**i) for i in range(p.size)]).sum(0)
+
+    def polyfit(self, datatuple, initparams, markstr='unspecified', interaction=0,  maxfev=2000, weights=None):
+        #initparams can be an array of coefficients [constant,lin term, quad term,...] or an integer indicating the order of the polynomial
+        if isinstance(initparams, int):
+            initparams=numpy.ones(initparams+1)
+        else:
+            initparams=numpy.float32(initparams)
+        parnames=[]
+        i=0
+        for par in initparams:
+            parnames+=[''.join(('coef', `i`))]
+            i+=1
+
+        return self.genfit(self.poly, initparams, datatuple, markstr, parnames, interaction, maxfev, weights=weights)
+
+
+    def gaussianfit(self, datatuple, initparams=scipy.array([1, 0, 1]), markstr='unspecified', interaction=0, showplot=True, maxfev=2000, weights=None):
+        return self.genfit(self.gaussian, initparams, datatuple, markstr, parnames=['coef', 'center', 'sigma'], interaction=interaction, maxfev=maxfev, weights=weights)
+
+    def gaussian(self, p, x):
+        return p[0]*scipy.exp(-0.5*((x-p[1])/p[2])**2)
+
+    def lorentzianfit(self, datatuple, initparams=scipy.array([1, 0, 1]), markstr='unspecified', interaction=0, showplot=True, maxfev=2000, weights=None):
+        return self.genfit(self, self.lorentzian, initparams, datatuple, markstr, parnames=['coef', 'center', 'gamma'], interaction=interaction, maxfev=maxfev, weights=weights)
+
+    def lorentzian(self, p, x):
+        return (p[0]/scipy.pi)*p[2]/((x-p[1])**2+p[2]**2)
 
 def removeoutliers_meanstd(arr, nptsoneside, nsig, gapptsoneside=0): #avrages maximum of 2*nptoneside points and usees distance from mean scaled by std compared to nsig to determine if the value should be replaced by the mean. if gapptsoneside>0, will do this leaving a gap around the point in question and using nptsoneside-gaps points for the mean and std
     if nptsoneside==1 and gapptsoneside==0:
