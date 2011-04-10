@@ -222,8 +222,57 @@ def saveSCcalculations(h5path, h5expname, h5hpname, hpsegdlist, recname):
             del h5g[k]
         ds=h5g.create_dataset(k, data=savearr)
         ds.attrs['recipe']=recname
+        
+    #now save fit results    
+    savekeys=set([k for d in hpsegdlist for k in d.keys() if k.startswith('FITPARS_') and not ('~' in k or k in h5hp[h5hpname] or k=='cycletime') and isinstance(d[k], numpy.ndarray)])
+    for k in list(savekeys):
+        if k in h5g:
+            h5fg=h5g[k]
+        else:
+            h5fg=h5g.create_group(k)
+        for n, d in enumerate(hpsegdlist):
+            if `n` in h5fg:
+                del h5fg[`n`]
+            ds=h5g.create_dataset(`n`, data=d[k])
+            ds.attrs['recipe']=recname
     h5file.close()
-
+def getfitdictlist_hp(h5path, h5expname, h5hpname):
+    hpsdl=CreateHeatProgSegDictList(h5path, h5expname, h5hpname)
+    h5file=h5py.File(h5path, mode='r')
+    fitdlist=[]
+    for k in hpsdl[0].keys():
+        for i in range(len(hpsdl)):
+            temp=getfitdict_nameseg(h5file, h5expname, h5hpname, k, i)
+            if not temp is None:
+                fitdlist+=[temp]
+    h5file.close()
+def getfitdict_nameseg(h5pf, h5expname, h5hpname, dsname, seg):
+    if isinstance(h5pf, str):
+        h5file=h5py.File(h5pf, mode='r')
+    else:
+        h5file=h5pf
+    try:
+        getcalanalysis(h5file, h5expname)[h5hpname]
+        nam='FITPARS_'+dsname
+        ds=[nam][`seg`]
+        h5rg=getSCrecipegrp(h5file, h5expname)[ds.attrs['recipe']]
+        for fcnname in h5rg.attrs['fcns']:
+            g=h5rg[fcnname]
+            if g.attrs['savename']==nam:
+                break
+        d={}
+        d['seg']=seg
+        d['dsname']=dsname
+        d['fitpars']=ds[:, :]
+        d['fcnname']=[fcnname]
+        for k in ['parnames', 'segdkeys', 'filters', 'postfilter']:
+            d[k]=h5r.attrs[k]
+    except:
+        d=None
+    if isinstance(h5pf, str):
+        return h5file, d
+    return d
+    
 def writecellres(h5path, h5expname, h5hpname, R):
     h5file=h5py.File(h5path, mode='r+')
     h5hpgrp=gethpgroup(h5file, h5expname, h5hpname)

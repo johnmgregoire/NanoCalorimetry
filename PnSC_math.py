@@ -1,6 +1,7 @@
-import numpy, scipy
+import numpy, scipy, scipy.optimize
 import h5py
 import os, os.path, time, copy
+from PnSC_ui import *
 
 #def ndiv(x, nptsoneside=20):
 #    nptsoneside=max(nptsoneside, 2.)
@@ -28,7 +29,7 @@ def savgolsmooth(x, nptsoneside=7, order = 4, dx=1.0, deriv=0): #based on scipy 
     smooth_data=numpy.array(smooth_data)/(dx**deriv)
     return smooth_data
 
-class fitfcns:
+class fitfcns: #datatuples are x1,x2,...,y
     #.finalparams .sigmas .parnames useful, returns fitfcn(x)
     def genfit(self, fcn, initparams, datatuple, markstr='unspecified', parnames=[], interaction=0,  maxfev=2000, weights=None):
         self.maxfev=maxfev
@@ -40,7 +41,7 @@ class fitfcns:
         self.error=False
         if weights is None:
             def wts(x):
-                return 1
+                return 1.
         elif weights=='parabolic':
             a=(datatuple[0][0]+datatuple[0][-1])/2.0
             b=(datatuple[0][-1]-datatuple[0][0])/2.0
@@ -89,7 +90,7 @@ class fitfcns:
         if isinstance(initparams, int):
             initparams=numpy.ones(initparams+1)
         else:
-            initparams=numpy.float32(initparams)
+            initparams=numpy.float64(initparams)
         parnames=[]
         i=0
         for par in initparams:
@@ -198,23 +199,54 @@ def replacevalswithneighs(arr, inds):
     juse=numpy.int64([jgood[numpy.argmin((jgood-jv)**2)] for jv in inds])
     arr[inds]=arr[juse]
     return arr
+
+def timepartition(cycletime, timepartitionfcn='timepart_none', piecelist=[1], yvals=[]):
+    if timepartitionfcn=='timepart_none':
+        return numpy.zeros(cycletime.shape, dtype='float64')
+    elif timepartitionfcn=='timepart_user':
+        idialog=timepartDialog(None, cycletime, numpieces=len(piecelist), yvals=yvals)
+        idialog.exec_()
+        return idialog.timepart
+    elif timepartitionfcn=='timepart_peakid':
+        return numpy.zeros(cycletime.shape, dtype='float64')#not implemented yet
+    else:
+        print 'ERROR - ABOUT TO ABORT BECAUSE timepartitionfcn IS NOT VALID'
+        return
     
 def performgenericfilter(arr, filterdict):#filterdict can contains unused key:val but it must contain all those necessary for a given filter step to be performed
     arr=copy.copy(arr)
-    fcn_parname_fkey=[\
-    (removeoutliers_meanstd, ['nptsoneside', 'nsig', 'gapptsoneside'], ['OLnpts', 'OLnsig', 'OLgappts']), \
-    (savgolsmooth, ['nptsoneside', 'order', 'deriv'], ['SGnpts', 'SGorder', 'SGderiv']), \
+    fcn_parname_fkey_eachcycle=[\
+    (removeoutliers_meanstd, ['nptsoneside', 'nsig', 'gapptsoneside'], ['OLnpts', 'OLnsig', 'OLgappts'], True), \
+    (savgolsmooth, ['nptsoneside', 'order', 'deriv'], ['SGnpts', 'SGorder', 'SGderiv'], True), \
+    (timeintegrate, ['integwindow_s'], ['integwindow_s'], True)
+#    (timepartition, ['timepartitionfcn', 'piecelist', 'yvals'], ['timepartitionfcn', 'fitpars', 'yvals'], False)
     ]
-    for f, nl, kl in fcn_parname_fkey:
+    for f, nl, kl, eachcycle in fcn_parname_fkey_eachcycle:
         parlist=[((not k in filterdict) or filterdict[k] is None) or (n, filterdict[k]) for n, k in zip(nl, kl)] 
         if True in parlist:
             continue
         print 'executing filter function ', f.func_name, dict(parlist)
         print arr.shape
-        arr=numpy.array([f(a, **dict(parlist)) for a in arr])
+        if eachcycle:
+            arr=numpy.array([f(a, **dict(parlist)) for a in arr])
+        else:
+            arr=f(arr, **dict(parlist))
     #arr=removeoutliers_meanstd(arr, nptsoneside=filterdict['OLnpts'], nsig=filterdict['OLnsig'], gapptsoneside=filterdict['OLgappts'])
     #savgolsmooth(arr, nptsoneside=filterdict['SGnpts'], order=filterdict['SGorder'], deriv=filterdict['SGderiv'])
     return arr
+
+#def polyorder4_T(polycoefs, T):
+#    return numpy.array([polycoefs[i]*(x**i) for i in range(5)]).sum(axis=0)
+#
+#def T4_intdT_2pieceC(pars, T, intdT, fixedpardict={'startind_2pieceC':numpy.uint16([])}):#startind_2pieceC si the index after which pars[1] will be used as the heat capacity
+#    c=numpy.ones(T.shape, dtype='float64')*pars[0]
+#    c[fixedpardict['startind_2pieceC']:]=pars[1]
+#    return c+pars[2]*T**4+pars[3]*intdT
+    
+#HeatLossFunctionLibrary={\ #key:function,list of segdict keys, list of (fitpar name, dflt), dictionary of fixed parameters
+#                   'polyorder4_T':(polyorder4_T, ['sampletemperature'], 'a+bT+cT^2+dT^3+eT^4', [('a', 1.e-6), ('a', 1.e-8), ('a', 1.e-10), ('a', 1.e-12), ('a', 1.e-14)], None)\
+#                    'T4_intdT_2pieceC':(T4_intdT_2pieceC, [])
+#                   }
 
 #x=numpy.linspace(10., 20., 40)
 #x[1]=0.
@@ -224,3 +256,16 @@ def performgenericfilter(arr, filterdict):#filterdict can contains unused key:va
 #x[-1]=0.
 #y=removeoutliers_meanstd(x, 6, 1.5, 2)
 #print '***', x-y
+
+def evaluatefitfcn(fitd, segd):
+    f=FitFcnLibrary[fitd['fcnname']]
+    pns=fitd['parnames']
+    ks=fitd['segdkeys']
+    return numpy.float32([f(**dict([('p', p)]+[(pn, segd[k][i]) for pn, k in zip(pns, ks)])) for i, p in enumerate(fitd['fitpars'])])
+    
+    
+    
+FitFcnLibrary=dict([\
+    ('polyorder4_T', lambda p, t, T:numpy.float64([p[int(round(i))] for i in t])+numpy.array([v*(T**(i+1)) for i, v in enumerate(p[-4:])]).sum(axis=0)),\
+    ('pieceC_T4_intdT', lambda p, t, T, dT: numpy.float64([p[int(round(i))] for i in t])+p[-2]*T+p[-1]*dT),\
+    ])

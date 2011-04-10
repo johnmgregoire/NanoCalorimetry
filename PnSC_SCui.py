@@ -40,15 +40,15 @@ class SCrecipeDialog(QDialog):
         if calctype=='RTPSD':
             ncalcs=self.RTPSDsetup()
             self.filterd['dt_dflt']=self.dfltfilterdict(deriv=1)
+        elif calctype=='FitPS':
+            for d in self.dfltfitfilterdicts():
+                self.filterd[d['name']]=copy.deepcopy(d)
         elif calctype=='QUC':
             ncalcs=self.QUCsetup()
             self.filterd['Qdflt']=self.Qfilterdict(par)
             self.filterd['refdflt']=self.reffilterdict(par)
             
-        
 
-        
-        
         #*****************************************************
         importfiltersButton=QPushButton()
         importfiltersButton.setText("import filters\n(overwrites if same name)")
@@ -205,6 +205,33 @@ class SCrecipeDialog(QDialog):
         QObject.connect(d['slider'], SIGNAL("sliderReleased()"), self.slidermoved4)
         return 5
 
+    def FitPSsetup(self):
+        d=self.calclayoutgen('pt', ['none', 'user-def', 'autocalc'])
+        self.parLayout.addWidget(d['widget'])
+        d['savename']='cyclepartition'
+        d['fcns']=[pt_none, pt_user, pt_calc]
+        d['parnames']=[['t'], ['t', 'D'], ['t', 'D']]
+        d['segdkeys']=[['cycletime'], ['cycletime', 'samplepowerperrate'], ['cycletime', 'samplepowerperrate']]
+        d['postcombofcns']=[self.nofilterfill, self.nofilterfill, self.nofilterfill]
+        d['parcombofcns']=[[], [self.timepartfilterfill, self.filterfill], [self.timepartfilterfill, self.filterfill]]
+        d['slider'].setMaximum(len(d['parnames'])-1)
+        self.pardlist+=[copy.copy(d)]
+        QObject.connect(d['slider'], SIGNAL("sliderReleased()"), self.slidermoved0)
+        
+        d=self.calclayoutgen('Dfit', ['c(t)+dT+eT^2+fT^3+gT^4', 'c(t)+k<dT>+aT4'])
+        self.parLayout.addWidget(d['widget'])
+        d['savename']='FITPARS_sampleheatloss'
+        d['fcns']=[polyorder4_T, pieceC_T4_intdT]
+        d['parnames']=[['c','T', 'D'], ['c','T', 'dT', 'D']]
+        d['segdkeys']=[['cyclepartition','sampletemperature', 'samplepowerperrate'], ['cyclepartition', 'sampletemperature', 'sampleheatrate', 'samplepowerperrate']]
+        d['postcombofcns']=[self.nofilterfill, self.nofilterfill]
+        d['parcombofcns']=[[self.fitfilterfill, self.fitfilterfill, self.filterfill], [self.fitfilterfill, self.fitfilterfill, self.integfilterfill, self.filterfill]]
+        d['slider'].setMaximum(len(d['parnames'])-1)
+        self.pardlist+=[copy.copy(d)]
+        QObject.connect(d['slider'], SIGNAL("sliderReleased()"), self.slidermoved0)
+        
+        return 2
+    
     def QUCsetup(self):
         d=self.calclayoutgen('Q', ['Qref','Qo+kA<T>+esA<T4>'])
         self.parLayout.addWidget(d['widget'])
@@ -424,8 +451,28 @@ class SCrecipeDialog(QDialog):
     def derfilterfill(self, cb):
         self.filterfill(cb, deriv=1)
     
+    def nofilterfill(self, cb):
+        self.filterfill(cb, reqkeys=['None'])
+    
+    def fitfilterfill(self, cb):#fitpars is a list of stareting values for fitparameters applicable to the gicen variable. i.e. for a 4th order polynomial of T, fitpar should be a list of 4 coefficients. It is up to the user to get the number and order of the parameters correct.
+        self.filterfill(cb, reqkeys=['fitpars'])
+        
+    def integfilterfill(self, cb):
+        self.filterfill(cb, reqkeys=['integwindow_s', 'fitpars'])
+    
+    def timepartfilterfill(self, cb):
+        self.filterfill(cb, reqkeys=['numpartitions'])#fitpars is going to determine the number of parititons so it is necessary. if there will not be a contant term in the fit, then will will still need to be icnluded here and excluded in the fitfcn defintion
+        #time partition functions: timepart_user, timepart_none, timepart_peakid (peakid not developed as of April2011)
     def refpathfilterfill(self, cb):
         self.filterfill(cb, reqkeys=['REFh5path', 'REFalignment'])
+    
+    def dfltfitfilterdicts(self, deriv=0):
+        return [{'name':'timepart', 'numpartitions':1}, #contants and any other piecewise parameters have this many segments and these starting values\
+                    {'name':'fit_polyT4','fitpars':[1.e-8, 1.e-10, 1.e-12, 1.e-14]}, \
+                    {'name':'fit_T4','fitpars':[1.e-14]}, \
+                    {'name':'fit_dT','fitpars':[1.e-8]}, \
+                    {'name':'fit_c','fitpars':[1.e-6]}, \
+                ]
     
     def dfltfilterdict(self, deriv=0):
         return {'OLnpts':1, \
@@ -436,12 +483,7 @@ class SCrecipeDialog(QDialog):
                 'SGderiv':deriv, \
                 }
     def Nonefilterdict(self):
-        return {'OLnpts':None, \
-                'OLnsig':None, \
-                'OLgappts':None, \
-                'SGnpts':None, \
-                'SGorder':None, \
-                'SGderiv':0, \
+        return {'None':None, \
                 }
     
     def Qfilterdict(self, h5pathstr):
@@ -1131,7 +1173,82 @@ def filterattredit(parent, AttrDict, arr=None, title="Edit filter parameters. 'S
         count+=1
     return True
 
+def polyorder4_T(segd, fild, c, T, D, h5path=None, h5expname=None, h5hpname=None):#the I, dIdt, etc. should be tuples with a key for segd and then a key for fild
+    fitpars=[]
+    for tup in enumerate([c, T, D]):
+        (segkey, filkey)=tup
+        if 'fitpars' in fild[filkey].keys():
+            fitpars+=fild[filkey]['fitpars']
+            segd['~'.join(tup)]=performgenericfilter(segd[segkey], fild[filkey])
     
+    paritionedtime=segd['~'.join(c)]
+    T_=segd['~'.join(T)]
+    D_=segd['~'.join(D)]
+    
+    fp=[]
+    ff=fitfcns()
+    for pt, cycT, cycD in zip(paritionedtime, T_, D_):
+        ff.genfit(FitFcnLibrary[polyorder4_T.__name__], fitpars, (pt[pt>=0], cycT[pt>=0], cycD[pt>=0]))
+        fp+=[ff.finalparams]
+    fp=numpy.float32(fp)
+    return fp
+    
+def pieceC_T4_intdT(segd, fild, c, T, dT, D, h5path=None, h5expname=None, h5hpname=None):#the I, dIdt, etc. should be tuples with a key for segd and then a key for fild
+    fitpars=[]
+    for tup in enumerate([c, T, dT, D]):
+        (segkey, filkey)=tup
+        if 'fitpars' in fild[filkey].keys():
+            fitpars+=fild[filkey]['fitpars']
+            segd['~'.join(tup)]=performgenericfilter(segd[segkey], fild[filkey])
+    
+    paritionedtime=segd['~'.join(c)]
+    T_=segd['~'.join(T)]
+    dT_=segd['~'.join(dT)]
+    D_=segd['~'.join(D)]
+    
+    fp=[]
+    ff=fitfcns()
+    for pt, cycT, cycdT, cycD in zip(paritionedtime, T_, dT_, D_):
+        ff.genfit(FitFcnLibrary[pieceC_T4_intdT.__name__], fitpars, (pt[pt>=0], cycT[pt>=0], cycdT[pt>=0], cycD[pt>=0]))
+        fp+=[ff.finalparams]
+    fp=numpy.float32(fp)
+    return fp
+
+def pt_none(segd, fild, t, h5path=None, h5expname=None, h5hpname=None):
+    (segkey, filkey)=t
+    return numpy.zeros(segd[segkey].shape, dtype='float32')
+    
+def pt_user(segd, fild, t, D, h5path=None, h5expname=None, h5hpname=None):#the I, dIdt, etc. should be tuples with a key for segd and then a key for fild
+    fitpars=[]
+    for tup in enumerate([t, D]):
+        (segkey, filkey)=tup
+        if 'fitpars' in fild[filkey].keys():
+            fitpars+=fild[filkey]['fitpars']
+            segd['~'.join(tup)]=performgenericfilter(segd[segkey], fild[filkey])
+    
+    D_=segd['~'.join(D)]
+    (segkey, filkey)=t
+    segd[segkey]
+    idialog=timepartDialog(None, segd[segkey], numpieces=fild[filkey]['numpartitions'], yvals=D_)
+    idialog.exec_()
+    return idialog.timepart
+    
+def pt_calc(segd, fild, t, D, h5path=None, h5expname=None, h5hpname=None):#TODO: need tgo wirte auto time partiiooning. this is not implemented yet, so just using copy user-defined fcn
+    fitpars=[]
+    for tup in enumerate([t, D]):
+        (segkey, filkey)=tup
+        if 'fitpars' in fild[filkey].keys():
+            fitpars+=fild[filkey]['fitpars']
+            segd['~'.join(tup)]=performgenericfilter(segd[segkey], fild[filkey])
+    
+    D_=segd['~'.join(D)]
+    (segkey, filkey)=t
+    segd[segkey]
+    idialog=timepartDialog(None, segd[segkey], numpieces=fild[filkey]['numpartitions'], yvals=D_)
+    idialog.exec_()
+    return idialog.timepart
+    
+#TODO: using the savename FITPARS_sampleheatloss, when the saveSCcalculations is called, need to save the fitpars even though they don't adhere to the shape criteria. also want to save attributes with the parameters, like timepart and which function was used. probably take the above fitfcn  and rename them as functions that can be called with segdict. maybe still define a fifcn but have it be a wrapper in which the parameters are wrappedinto a dictionary and passed into the functio that accepts segdict
     
 #p='C:/Users/JohnnyG/Documents/PythonCode/Vlassak/NanoCalorimetry/Nanocopeia1_PnSC.h5'
 ##p='C:/Users/JohnnyG/Documents/HarvardWork/pharma/PnSC/Nanocopeia1_PnSC.h5'

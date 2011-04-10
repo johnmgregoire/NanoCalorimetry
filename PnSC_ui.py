@@ -172,6 +172,16 @@ class plotwidget(FigureCanvas):
         #NavigationToolbar(self, parent)
         NavigationToolbar(self, self)
         
+        self.mpl_connect('button_press_event', self.myclick)
+        self.clicklist=[]
+    
+    def myclick(self, event):
+        if not (event.xdata is None or event.ydata is None):
+            arrayxy=[event.xdata, event.ydata]
+            print 'clicked on image: array indeces ', arrayxy
+            self.clicklist+=[arrayxy]
+            self.emit(SIGNAL("genericclickonplot"), [event.xdata, event.ydata])
+
 class attreditorDialog(QDialog):
     def __init__(self, parent, attrd, arr=None, title=''):
         super(attreditorDialog, self).__init__(parent)
@@ -931,6 +941,65 @@ class rescalDialog(QDialog):
             ds.attrs['Rovaluesaveragedwith']=pnts[1].name
         self.h5file.close()
 
+def fitviewer(parent, hpsdl, fitdlist):
+    strlist=['%s, seg %d' %(d['dsname'], d['seg']) for d in fitdlist]
+    idialog=selectorDialog(parent, strlist, title='select from the available fit data')
+    if not idialog.exec_():
+        return
+    fitd=fitdlist[idialog.index]
+    
+    strlist=['cycletime']+fitd['segdkeys']
+    idialog=selectorDialog(parent, strlist, title='select an x-coordinate')
+    if not idialog.exec_():
+        return
+    xdata=hpsdl[fitd['seg']][strlist[idialog.index]]
+    ydata=hpsdl[fitd['seg']][fitd['dsname']]
+    yfitdata=evaluatefitfcn(fitd, hpsdl[fitd['seg']])
+    
+    idialog=fitplotDialog(parent, xdata, ydata, yfitdata, hpsdl[fitd['seg']]['cyclepartition'])
+    idialog.show()
+
+class fitplotDialog(QDialog):
+    def __init__(self, parent, xdata, ydata, yfitdata, cyclepartition):#if xdata not provided just plots data, if provided must be same format as data. if data is 2-d or list or arrays, iterates over 1st d and plots vs second
+        super(fitplotDialog, self).__init__(parent)
+
+        self.xdata=xdata
+        self.ydata=ydata
+        self.yfitdata=yfitdata
+        self.cyclepartition=cyclepartition
+        
+        mainlayout=QGridLayout()
+        self.cycleComboBox=QComboBox()
+        cycLabel=QLabel()
+        cycLabel.setText('select cycle(s)\nfor calculation')
+
+        self.cycleComboBox.clear()
+        self.cycleComboBox.insertItem(0, 'all')
+        for i in range(xdata.shape[0]):
+            self.cycleComboBox.insertItem(i, `i`)
+        self.cycleComboBox.setCurrentIndex(0)
+        
+        QObject.connect(self.cycleComboBox,SIGNAL("activated(QString)"),self.plot)
+        
+        plotw=plotwidget(self)
+        mainlayout.addWidget(cycLabel, 0, 0)
+        mainlayout.addWidget(self.cycleComboBox, 0, 1)
+        mainlayout.addWidget(plotw, 1, 0, 5, 3)
+        self.setLayout(mainlayout)
+        self.plot()
+    
+    def plot(self):
+        idialog.plotw.axes.cla()
+        i=self.cycleComboBox.currentIndex()
+        (x, y, yf, tp) =(self.xdata[i], self.ydata[i], self.yfitdata[i], self.cyclepartition[i])
+        if len(numpy.any(tp>=0))>0:
+            self.plotw.axes.plot(x[tp>=0], y[tp>=0], '.', markersize=1, color='k', label='data')
+        if len(numpy.any(tp<0))>0:
+            self.plotw.axes.plot(x[tp<0], y[tp<0], '.', markersize=1, color='k', alpha=.6, label='excluded')
+        self.plotw.axes.plot(x, yf, 'r-', lw=2, label='fit')
+        self.plotw.axes.legend(loc=2)
+        idialog.plotw.fig.canvas.draw()
+        
 class simpleplotDialog(QDialog):
     def __init__(self, parent, data, xdata=None, style='.'):#if xdata not provided just plots data, if provided must be same format as data. if data is 2-d or list or arrays, iterates over 1st d and plots vs second
         super(simpleplotDialog, self).__init__(parent)
@@ -945,11 +1014,13 @@ class simpleplotDialog(QDialog):
         
         plotw=plotwidget(self)
         mainlayout.addWidget(plotw, 0, 0, 1, 2)
-        for count, arr in enumerate(data):
+        if isinstance(style, str):
+            style=[style]*len(data)
+        for count, (arr, sty) in enumerate(zip(data, style)):
             if xdata is None:
-                plotw.axes.plot(arr, style)
+                plotw.axes.plot(arr, sty)
             else:
-                plotw.axes.plot(xdata[count], arr, style)
+                plotw.axes.plot(xdata[count], arr, sty)
         plotw.axes.set_xlabel('array index')
         plotw.axes.set_ylabel('array value')
 
@@ -1077,4 +1148,277 @@ def TEMP():
     
     print 'done'
     
+
+#class fitpowerperheatrateDialog(QDialog):
+#    def __init__(self, parent, segdlist):
+#        super(fitpowerperheatrateDialog, self).__init__(parent)
+#        self.segdlist=segdlist
+#        mainlayout=QGridLayout()
+#        
+#        self.plotw=plotwidget(self)
+#        QObject.connect(self.plotw, SIGNAL("genericclickonplot"), self.clickprocess)
+#
+#        self.segComboBox=QComboBox()
+#        segLabel=QLabel()
+#        segLabel.setText('select segment\nfor calculation')
+#        self.cycleComboBox=QComboBox()
+#        cycLabel=QLabel()
+#        cycLabel.setText('select cycle(s)\nfor calculation')
+#        self.keyComboBox=QComboBox()
+#        keyLabel=QLabel()
+#        keyLabel.setText('select dataset\nfor calculation')
+#        self.fitfcnComboBox=QComboBox()
+#        fitcbLabel=QLabel()
+#        fitcbLabel.setText('select function\nfor fitting')
+#        self.fitfcnLabel=QLabel()
+#        
+#        self.segcalcoptions=[]
+#        for count, d in enumerate(self.hpsegdlist):
+#            if d['segmenttype'] in ['ramp', 'soak']:
+#                self.segComboBox.insertItem(len(self.segcalcoptions), 'segment %d : %s' %(count, d['segmenttype']))
+#                self.segcalcoptions+=[count]
+#        
+#        QObject.connect(self.segComboBox,SIGNAL("activated(QString)"),self.segcgchanged)
+#        QObject.connect(self.cycleComboBox,SIGNAL("activated(QString)"),self.plot)
+#        QObject.connect(self.keyComboBox,SIGNAL("activated(QString)"),self.plot)
+#        QObject.connect(self.fitfcnComboBox,SIGNAL("activated(QString)"),self.fitfcnchanged)
+#        self.segcgchanged()
+#        
+#        self.clickforexcludeCheckBox=QCheckBox()
+#        self.clickforexcludeCheckBox.setText('click to define excluded\nregions (x-coord only)\nclick low then high')
+#        self.lastclickx=None
+#        
+#        clearremoveindsButton=QPushButton()
+#        QObject.connect(clearremoveindsButton, SIGNAL("pressed()"), clearremoveindslist)
+#        self.clearremoveindslist()
+#        
+#        mainlayout.addWidget(delButton, 4, pwid, 1, 1)
+#        mainlayout.addWidget(addButton, 5, pwid, 1, 1)
+#        mainlayout.addWidget(self.rowComboBox, 4, pwid+1, 2, 1)
+#
+#
+#        mainlayout.addWidget(plotw, 0, 0, 1, 2)
+#        
+#        self.buttonBox = QDialogButtonBox(self)
+#        self.buttonBox.setGeometry(QRect(520, 195, 160, 26))
+#        self.buttonBox.setOrientation(Qt.Horizontal)
+#        self.buttonBox.setStandardButtons(QDialogButtonBox.Ok)
+#        QObject.connect(self.buttonBox, SIGNAL("accepted()"), self.accept)
+#        mainlayout.addWidget(self.buttonBox, 1, 0)
+#        self.setLayout(mainlayout)
+#        
+#    
+#    def segcgchanged(self, kdflt='samplepowerperheatrate'):
+#        self.segind=self.segcalcoptions[self.segComboBox.currentIndex()]
+#        d=self.segdlist[self.segind]
+#        self.cycletime0=d['cycletime'][0]
+#        self.cycinds=numpy.array(range(d['cycletime'].shape[1]))
+#        self.allcycinds=numpy.array(range(d['cycletime'].shape[1]))
+#        self.cycleComboBox.clear()
+#        self.cycleComboBox.insertItem(0, 'all')
+#        for i in range(d['cycletime'].shape[0]):
+#            self.cycleComboBox.insertItem(i+1, `i`)
+#        self.cycleComboBox.setCurrentIndex(0)
+#        
+#        self.keyComboBox.clear()
+#        temp=0
+#        i=0
+#        for i in range(d['cycletime'].shape[0]):
+#            if v.shape==d['cycletime'].shape:
+#                self.keyComboBox.insertItem(i, k)
+#                if k==kdflt:
+#                    temp=i
+#        self.keyComboBox.setCurrentIndex(temp)
+#        
+#        self.heatlossfcnsnames=[(k, fcnlabel, pard) for k, (fcn, reqdkeys, fcnlabel) in HeatLossFunctionLibrary.iteritems() if numpy.all([segk in d.keys() for segk in reqdkeys])]
+#        self.fitfcnComboBox.clear()
+#        for i, (nam, l) in enumerate(self.heatlossfcnsnames):
+#            self.fitfcnComboBox.insertItem(i, nam)
+#    
+#    def fitfcnchanged(self):
+#        fcnlabel=self.heatlossfcnsnames[self.fitfcnComboBox.currentIndex()][1]
+#        self.fitfcnLabel.setText(fcnlabel)
+#        
+#        
+#    def clearremoveindslist(self):
+#        self.removeindslist=[]
+#    def clickprocess(self, coords):
+#        if self.clickforexcludeCheckBox.isChecked():
+#            if self.lastclickx is None:
+#                self.lastclickx=coords[0]
+#            else:
+#                self.removeindslist+=[(min(coords[0], self.lastclickx), max(coords[0], self.lastclickx))]
+#                self.lastclickx=None
+#                self.plot()
+#        else:
+#            self.lastclickx=None
+#    
+#    def removeinds(self):
+#        self.cycinds=set(self.cycinds)
+#        for t0, t1 in self.removeindslist:
+#            self.cycinds-=set(numpy.where((self.cycletime0>t0)&(self.cycletime1<t1))[0])
+#        self.cycinds=numpy.array(sorted(list(self.cycinds)))
+#        
+#    def plot(self):
+#        self.key=str(self.keyComboBox.currentText())
+#        d=self.segdlist[self.segind]
+#        self.cycles=[self.cycleComboBox.currentIndex()]
+#        if self.cycles[0]<0:
+#            self.cycles=range(d['cycletime'].shape[0])
+#        self.removeinds()
+#        self.plotw.axes.cla()
+#        nofitinds=numpy.array(sorted(set(self.allcycinds)-set(self.cycinds)))
+#        for cyc in self.cycles:
+#            if len(self.cycinds)>0:
+#                self.plotw.axes.plot(self.cycletime0[self.cycinds], d[self.key][cyc][self.cycinds], 'k.', markersize=1)
+#            if len(nofitinds)>0:
+#                self.plotw.axes.plot(self.cycletime0[nofitinds], d[self.key][cyc][nofitinds], '.', markersize=1, color=(.6, .6, .6))
+                
+def timepartDialog(QDialog):
+    def __init__(self, parent, cycletime, yvals=None, numpieces=1):
+        if yvals is None:
+            self.yvals=cycletime
+        else:
+            self.yvals=yvals
+        super(timepartDialog, self).__init__(parent)
+        self.cycletime=cycletime
+        self.timepart=numpy.zeros(cycletime.shape, dtype='int32')
+        self.numpieces=numpieces
+        mainlayout=QGridLayout()
+        
+        self.plotw=plotwidget(self)
+        QObject.connect(self.plotw, SIGNAL("genericclickonplot"), self.clickprocess)
+
+        self.cycleComboBox=QComboBox()
+        cycLabel=QLabel()
+        cycLabel.setText('select cycle(s)\nfor calculation')
+
+        self.cycleComboBox.clear()
+        self.cycleComboBox.insertItem(0, 'all')
+        for i in range(d['cycletime'].shape[0]):
+            self.cycleComboBox.insertItem(i+1, `i`)
+        self.cycleComboBox.setCurrentIndex(0)
+        
+        QObject.connect(self.cycleComboBox,SIGNAL("activated(QString)"),self.plot)
+
+        self.clickforexcludeCheckBox=QCheckBox()
+        self.clickforexcludeCheckBox.setText('click to define excluded\nregions (x-coord only)\nclick low then high')
+        self.clickforexcludeCheckBox.setChecked(True)
+        self.lastclickx=None
+        
+        clearremoveindsButton=QPushButton()
+        clearremoveindsButton.setText('clear the list\nof excluded regions')
+        QObject.connect(clearremoveindsButton, SIGNAL("pressed()"), self.clearremoveindslist)
+        self.clearremoveindslist()
+  
+        autopiecebndryButton=QPushButton()
+        autopiecebndryButton.setText('Use exclude regions to\ndefine piece-wise fcn boundaries')
+        QObject.connect(autopiecebndryButton, SIGNAL("pressed()"), self.autopiecebndry)
+        self.clearremoveindslist()
+        
+        self.clickforpieceCheckBox=QCheckBox()
+        self.clickforpieceCheckBox.setText('click to define excluded\nregions (x-coord only)\nclick low then high')
+        self.clickforpieceCheckBox.setChecked(False)
+
+        clearpiecebndryButton=QPushButton()
+        clearpiecebndryButton.setText('clear the list of\npiecewise boundaries')
+        QObject.connect(clearpiecebndryButton, SIGNAL("pressed()"), self.clearpiecebndrylist)
+        self.clearpiecebndrylist()
+        
+        mainlayout.addWidget(cycLabel,0,0)
+        mainlayout.addWidget(self.cycleComboBox,0,1)
+        mainlayout.addWidget(self.clickforexcludeCheckBox, 1,0, 1, 2)
+        mainlayout.addWidget(clearremoveindsButton, 2,0, 1, 2)
+        mainlayout.addWidget(autopiecebndryButton, 3,0, 1, 2)
+        mainlayout.addWidget(self.clickforpieceCheckBox, 4,0, 1, 2)
+        mainlayout.addWidget(clearpiecebndryButton, 5, 0, 1, 2)
+
+        mainlayout.addWidget(self.plotw, 0, 2, 6, 6)
+        
+        self.buttonBox = QDialogButtonBox(self)
+        self.buttonBox.setGeometry(QRect(520, 195, 160, 26))
+        self.buttonBox.setOrientation(Qt.Horizontal)
+        self.buttonBox.setStandardButtons(QDialogButtonBox.Ok)
+        QObject.connect(self.buttonBox, SIGNAL("accepted()"), self.accept)
+        mainlayout.addWidget(self.buttonBox, 6, 2, 1, 6)
+        self.setLayout(mainlayout)
+
     
+    def clearremoveindslist(self):
+        i=self.cycleComboBox.currentIndex()
+        if i==0:
+            self.removeindslist=[[] for i in range(self.cycletime.shape[0])]
+        else:
+            self.removeindslist[i-1]=[]
+    
+    def clearpiecebndrylist(self):
+        i=self.cycleComboBox.currentIndex()
+        if i==0:
+            self.piecebndrylist=[[] for i in range(self.numpieces-1)]
+        else:
+            self.piecebndrylist[i-1]=[]
+            
+    def clickprocess(self, coords):
+        if self.clickforexcludeCheckBox.isChecked():
+            if self.lastclickx is None:
+                self.lastclickx=coords[0]
+            else:
+                i=self.cycleComboBox.currentIndex()
+                if i==0:
+                    for l in self.removeindslist:
+                        l+=[(min(coords[0], self.lastclickx), max(coords[0], self.lastclickx))]
+                else:
+                    self.removeindslist[i-1]+=[(min(coords[0], self.lastclickx), max(coords[0], self.lastclickx))]
+                self.lastclickx=None
+                self.plot()
+        else:
+            self.lastclickx=None
+            
+        if self.clickforpieceCheckBox.isChecked():
+            i=self.cycleComboBox.currentIndex()
+            if i==0:
+                for l in self.piecebndrylist:
+                    if len(l)<self.numpieces:
+                        l+=[coords[0]]
+                    else:
+                        print 'replacing last piece boundary because enough boundaries have already been defined'
+                        l[-1]=coords[0]
+            else:
+                if len(self.piecebndrylist[i-1])<self.numpieces:
+                    self.piecebndrylist[i-1]+=[coords[0]]
+                else:
+                    print 'replacing last piece boundary because enough boundaries have already been defined'
+                    self.piecebndrylist[i-1][-1]=coords[0]
+            self.plot()
+            
+    def autopiecebndry(self):
+        i=self.cycleComboBox.currentIndex()
+        if i==0:
+            for i, rl in zip(range(self.numpieces-1), self.removeindslist):#if there are more parititons than piece bndrys then use as many as necessary
+                self.piecebndrylist[i]=[(rl[0]+rl[1])/2.]#put the bndry in the middle of the exlcude region
+        else:
+            self.piecebndrylist[i-1]+=[(rl[0]+rl[1])/2.]
+    def calctimepart(self):
+        self.timepart=numpy.zeros(cycletime.shape, dtype='int32')
+        self.cycinds=set(self.cycinds)
+        for tp, time, rem in zip(self.timepart, self.cycletime, self.removeindslist):
+            for (t0, t1) in rem:
+                tp[(time>t0)&(time<t1)]=-1
+        for tp, time, bdry in zip(self.timepart, self.cycletime, self.piecebndrylist):
+            bdry=numpy.sort(bdry)
+            for i, t0 in enumerate(bdry):
+                tp[(time>=t0)&(tp>=0)]=i+1
+    def plot(self):
+        colors=['k']+['b', 'g', 'r', 'c', 'm', 'y']*5
+        cycles=[self.cycleComboBox.currentIndex()-1]
+        if cycles[0]<0:
+            cycles=range(self.cycletime.shape[0])
+        self.calctimepart()
+        self.plotw.axes.cla()
+        nofitinds=numpy.array(sorted(set(self.allcycinds)-set(self.cycinds)))
+        for cyc in cycles:
+            tp=self.timepart[cyc]
+            for i in range(-1, self.numpieces):
+                if len(numpy.any(tp==i))>0:
+                    self.plotw.axes.plot(self.cycletime[cyc][tp==i], self.yvals[cyc][tp==i], '.', markersize=1, color=colors[i+1])
+        self.plotw.fig.canvas.draw()

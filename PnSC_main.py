@@ -131,6 +131,7 @@ class MainMenu(QMainWindow):
         self.action_getsegd=MainMenuQAction(self,'action_getsegd', 'send SegDict to data (select a heat program)', self.menuplot, [('h5open', [True]), ('selectiongrouptype', ['heatprogram'])], self.ActionDict)
         self.action_plotsegs=MainMenuQAction(self,'action_plotsegs', 'plot Segs by color (select a heat program)', self.menuplot, [('h5open', [True]), ('selectiongrouptype', ['heatprogram'])], self.ActionDict)
         self.action_viewSCanalysis=MainMenuQAction(self,'action_viewSCanalysis', 'SC data viewer (select a heat program)', self.menuplot, [('h5open', [True]), ('selectiongrouptype', ['heatprogram'])], self.ActionDict)
+        self.action_viewFit=MainMenuQAction(self,'action_viewFit', 'Fit data viewer (select a heat program)', self.menuplot, [('h5open', [True]), ('selectiongrouptype', ['heatprogram'])], self.ActionDict)
         
         
         #setup a menu section
@@ -156,8 +157,9 @@ class MainMenu(QMainWindow):
         #setup a menu item in a menu section. 
         self.action_delan=MainMenuQAction(self,'action_delan', 'Delete analysis Group (select analysis group)', self.anmenu, [('h5open', [True]),  ('selectiongrouptype', ['analysis'])], self.ActionDict)
         self.action_screcipe=MainMenuQAction(self,'action_screcipe', 'Build SC analysis recipe (select heat program)', self.anmenu, [('h5open', [True]),  ('selectiongrouptype', ['heatprogram'])], self.ActionDict)
+        self.action_fitlossrecipe=MainMenuQAction(self,'action_fitlossrecipe', 'Build heat loss fit model recipe (select heat program)', self.anmenu, [('h5open', [True]),  ('selectiongrouptype', ['heatprogram']), ('samplepowerperrateexists', [True])], self.ActionDict)
         self.action_applyscrecipe=MainMenuQAction(self,'action_applyscrecipe', 'Apply SC analysis recipe (select experiment or heat program)', self.anmenu, [('h5open', [True]),  ('selectiongrouptype', ['experiment', 'heatprogram'])], self.ActionDict)
-
+        
         self.setMenuBar(self.main_menu_pulldown)
         QMetaObject.connectSlotsByName(self)
     
@@ -242,6 +244,7 @@ class MainMenu(QMainWindow):
         else:
             self.statusdict['selectionparentname']=self.h5nodename_treeitem(treeitem.parent())
         
+        self.statusdict['samplepowerperrateexists']=True#TODO: write code for checking on existence of analysis data arrays
         
         if self.statusdict['selectiontype']=='Group':
             if self.statusdict['selectionparentname']=='HeatProgram':
@@ -529,6 +532,14 @@ class MainMenu(QMainWindow):
         idialog.show()
     
     @pyqtSignature("")
+    def on_action_viewFit_triggered(self):
+        pathlist=self.geth5selectionpath(liststyle=True)
+        self.data=getfitdictlist_hp(self.h5path, pathlist[1], pathlist[4])
+        hpsdl=CreateHeatProgSegDictList(self.h5path, pathlist[1], pathlist[4])
+        fitviewer(self, hpsdl, self.data)
+
+        
+    @pyqtSignature("")
     def on_action_delan_triggered(self):
         path=self.geth5selectionpath(liststyle=False)
         g, garb, p=path.strip('/').rpartition('/')
@@ -551,6 +562,15 @@ class MainMenu(QMainWindow):
         fillh5tree(self.treeWidget, h5file, selectionpathlist=oldselection)
         h5file.close()
 
+    @pyqtSignature("")
+    def on_action_fitlossrecipe_triggered(self):
+        pathlist=self.geth5selectionpath(liststyle=True)
+        idialog=SCrecipeDialog(self, self.h5path, pathlist[1], pathlist[4], calctype='FitPS')
+        idialog.show()
+        oldselection=self.geth5selectionpath(liststyle=True, removeformatting=False)
+        h5file=h5py.File(self.h5path, mode='r')
+        fillh5tree(self.treeWidget, h5file, selectionpathlist=oldselection)
+        h5file.close()
     @pyqtSignature("")
     def on_action_applyscrecipe_triggered(self):
         pathlist=self.geth5selectionpath(liststyle=True)
@@ -583,8 +603,7 @@ class MainMenuQAction(QAction):
 #        mainlayout.addWidget(self.treeWidget, 0, 0)
 #        self.setLayout(mainlayout)
 
-
-
+        
 def start(previousmm=None):
     mainapp=QApplication(sys.argv)
 
