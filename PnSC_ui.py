@@ -19,7 +19,24 @@ from PnSC_math import *
 from PnSC_h5io import *
 import PnSC_h5io as io
 
-
+class messageDialog(QDialog):
+    def __init__(self, parent=None, title=''):
+        super(messageDialog, self).__init__(parent)
+        self.setWindowTitle(title)
+        mainlayout=QGridLayout()
+  
+        self.buttonBox = QDialogButtonBox(self)
+        self.buttonBox.setGeometry(QRect(520, 195, 160, 26))
+        self.buttonBox.setOrientation(Qt.Horizontal)
+        self.buttonBox.setStandardButtons(QDialogButtonBox.Cancel|QDialogButtonBox.Ok)
+        QObject.connect(self.buttonBox, SIGNAL("accepted()"), self.accept)
+        QObject.connect(self.buttonBox, SIGNAL("rejected()"), self.reject)
+        mainlayout.addWidget(self.buttonBox, 0, 0)
+         
+        QObject.connect(self.buttonBox,SIGNAL("accepted()"),self.ExitRoutine)
+    def ExitRoutine(self):
+        return
+        
 def mygetopenfile(parent=None, xpath="%s" % os.getcwd(),markstr='', filename='' ):
     if parent is None:
         xapp = QApplication(sys.argv)
@@ -254,14 +271,7 @@ class attreditorDialog(QDialog):
             if origs!=s:
                 a, b, c=s.partition(':')
                 try:
-                    if c=='None':
-                        c=None
-                    else:
-                        temp=c.lstrip('0')
-                        if temp=='' and '0' in c:
-                            c=0
-                        else:
-                            c=eval(temp)
+                    c=myeval(c)
                 except:
                     pass
                 a=a.strip("'").strip('"')
@@ -941,7 +951,8 @@ class rescalDialog(QDialog):
             ds.attrs['Rovaluesaveragedwith']=pnts[1].name
         self.h5file.close()
 
-def fitviewer(parent, hpsdl, fitdlist):
+
+def fitviewer(parent, hpsdl, fitdlist, filterdict):
     strlist=['%s, seg %d' %(d['dsname'], d['seg']) for d in fitdlist]
     idialog=selectorDialog(parent, strlist, title='select from the available fit data')
     if not idialog.exec_():
@@ -954,8 +965,17 @@ def fitviewer(parent, hpsdl, fitdlist):
         return
     xdata=hpsdl[fitd['seg']][strlist[idialog.index]]
     ydata=hpsdl[fitd['seg']][fitd['dsname']]
-    yfitdata=evaluatefitfcn(fitd, hpsdl[fitd['seg']])
     
+    strlist=['None']+[filkey for filkey, fild in filterdict.iteritems() if not (False in [k in fild.keys() for k in ['interp_kind', 'extrap_order', 'interppars']])]
+    idialog=selectorDialog(parent, strlist, title='select a filter for fit fcn evaluate')
+    if not idialog.exec_():
+        return
+    if idialog.index==0:
+        yfitdata=evaluatefitfcn(fitd, hpsdl[fitd['seg']])
+    else:
+        fild=filterdict[strlist[idialog.index]]
+        yfitdata=evaluatefitfcn(fitd, hpsdl[fitd['seg']], interp_kind=fild['interp_kind'], extrap_order=fild['extrap_order'], interppars=fild['interppars'])
+    #return yfitdata
     idialog=fitplotDialog(parent, xdata, ydata, yfitdata, hpsdl[fitd['seg']]['cyclepartition'])
     idialog.show()
 
@@ -974,31 +994,30 @@ class fitplotDialog(QDialog):
         cycLabel.setText('select cycle(s)\nfor calculation')
 
         self.cycleComboBox.clear()
-        self.cycleComboBox.insertItem(0, 'all')
         for i in range(xdata.shape[0]):
             self.cycleComboBox.insertItem(i, `i`)
         self.cycleComboBox.setCurrentIndex(0)
         
         QObject.connect(self.cycleComboBox,SIGNAL("activated(QString)"),self.plot)
         
-        plotw=plotwidget(self)
+        self.plotw=plotwidget(self)
         mainlayout.addWidget(cycLabel, 0, 0)
         mainlayout.addWidget(self.cycleComboBox, 0, 1)
-        mainlayout.addWidget(plotw, 1, 0, 5, 3)
+        mainlayout.addWidget(self.plotw, 1, 0, 5, 3)
         self.setLayout(mainlayout)
         self.plot()
     
     def plot(self):
-        idialog.plotw.axes.cla()
+        self.plotw.axes.cla()
         i=self.cycleComboBox.currentIndex()
         (x, y, yf, tp) =(self.xdata[i], self.ydata[i], self.yfitdata[i], self.cyclepartition[i])
-        if len(numpy.any(tp>=0))>0:
-            self.plotw.axes.plot(x[tp>=0], y[tp>=0], '.', markersize=1, color='k', label='data')
-        if len(numpy.any(tp<0))>0:
-            self.plotw.axes.plot(x[tp<0], y[tp<0], '.', markersize=1, color='k', alpha=.6, label='excluded')
-        self.plotw.axes.plot(x, yf, 'r-', lw=2, label='fit')
+        if numpy.any(tp>=0):
+            self.plotw.axes.plot(x[tp>=0], y[tp>=0], '.', markersize=1, color='b', label='data')
+        if numpy.any(tp<0):
+            self.plotw.axes.plot(x[tp<0], y[tp<0], '.', markersize=1, color='k', alpha=.4, label='excluded')
+        self.plotw.axes.plot(x, yf, 'r-', lw=1, label='fit')
         self.plotw.axes.legend(loc=2)
-        idialog.plotw.fig.canvas.draw()
+        self.plotw.fig.canvas.draw()
         
 class simpleplotDialog(QDialog):
     def __init__(self, parent, data, xdata=None, style='.'):#if xdata not provided just plots data, if provided must be same format as data. if data is 2-d or list or arrays, iterates over 1st d and plots vs second
@@ -1012,17 +1031,17 @@ class simpleplotDialog(QDialog):
 #            arrlist=[dt for dt in data]
         mainlayout=QGridLayout()
         
-        plotw=plotwidget(self)
-        mainlayout.addWidget(plotw, 0, 0, 1, 2)
+        self.plotw=plotwidget(self)
+        mainlayout.addWidget(self.plotw, 0, 0, 1, 2)
         if isinstance(style, str):
             style=[style]*len(data)
         for count, (arr, sty) in enumerate(zip(data, style)):
             if xdata is None:
-                plotw.axes.plot(arr, sty)
+                self.plotw.axes.plot(arr, sty, markersize=1)
             else:
-                plotw.axes.plot(xdata[count], arr, sty)
-        plotw.axes.set_xlabel('array index')
-        plotw.axes.set_ylabel('array value')
+                self.plotw.axes.plot(xdata[count], arr, sty, markersize=1)
+        self.plotw.axes.set_xlabel('array index')
+        self.plotw.axes.set_ylabel('array value')
 
         self.buttonBox = QDialogButtonBox(self)
         self.buttonBox.setGeometry(QRect(520, 195, 160, 26))
@@ -1273,8 +1292,8 @@ def TEMP():
 #                self.plotw.axes.plot(self.cycletime0[self.cycinds], d[self.key][cyc][self.cycinds], 'k.', markersize=1)
 #            if len(nofitinds)>0:
 #                self.plotw.axes.plot(self.cycletime0[nofitinds], d[self.key][cyc][nofitinds], '.', markersize=1, color=(.6, .6, .6))
-                
-def timepartDialog(QDialog):
+
+class timepartDialog(QDialog):
     def __init__(self, parent, cycletime, yvals=None, numpieces=1):
         if yvals is None:
             self.yvals=cycletime
@@ -1285,6 +1304,9 @@ def timepartDialog(QDialog):
         self.timepart=numpy.zeros(cycletime.shape, dtype='int32')
         self.numpieces=numpieces
         mainlayout=QGridLayout()
+
+        self.piecebndrylist=[[] for i in range(self.numpieces-1)]
+        self.removeindslist=[[] for i in range(self.cycletime.shape[0])]
         
         self.plotw=plotwidget(self)
         QObject.connect(self.plotw, SIGNAL("genericclickonplot"), self.clickprocess)
@@ -1295,7 +1317,7 @@ def timepartDialog(QDialog):
 
         self.cycleComboBox.clear()
         self.cycleComboBox.insertItem(0, 'all')
-        for i in range(d['cycletime'].shape[0]):
+        for i in range(self.cycletime.shape[0]):
             self.cycleComboBox.insertItem(i+1, `i`)
         self.cycleComboBox.setCurrentIndex(0)
         
@@ -1350,6 +1372,7 @@ def timepartDialog(QDialog):
             self.removeindslist=[[] for i in range(self.cycletime.shape[0])]
         else:
             self.removeindslist[i-1]=[]
+        self.plot()
     
     def clearpiecebndrylist(self):
         i=self.cycleComboBox.currentIndex()
@@ -1357,6 +1380,7 @@ def timepartDialog(QDialog):
             self.piecebndrylist=[[] for i in range(self.numpieces-1)]
         else:
             self.piecebndrylist[i-1]=[]
+        self.plot()
             
     def clickprocess(self, coords):
         if self.clickforexcludeCheckBox.isChecked():
@@ -1392,15 +1416,16 @@ def timepartDialog(QDialog):
             self.plot()
             
     def autopiecebndry(self):
-        i=self.cycleComboBox.currentIndex()
-        if i==0:
-            for i, rl in zip(range(self.numpieces-1), self.removeindslist):#if there are more parititons than piece bndrys then use as many as necessary
-                self.piecebndrylist[i]=[(rl[0]+rl[1])/2.]#put the bndry in the middle of the exlcude region
-        else:
-            self.piecebndrylist[i-1]+=[(rl[0]+rl[1])/2.]
+        cycles=[self.cycleComboBox.currentIndex()-1]
+        if cycles[0]<0:
+            cycles=range(self.cycletime.shape[0])
+        for cyc in cycles:
+            self.piecebndrylist[cyc]=[]
+            for i, rl in zip(range(self.numpieces-1), self.removeindslist[cyc]):#if there are more parititons than piece bndrys then use as many as necessary
+                self.piecebndrylist[cyc]+=[(rl[0]+rl[1])/2.]#put the bndry in the middle of the exlcude region
+        self.plot()
     def calctimepart(self):
-        self.timepart=numpy.zeros(cycletime.shape, dtype='int32')
-        self.cycinds=set(self.cycinds)
+        self.timepart=numpy.zeros(self.cycletime.shape, dtype='int32')
         for tp, time, rem in zip(self.timepart, self.cycletime, self.removeindslist):
             for (t0, t1) in rem:
                 tp[(time>t0)&(time<t1)]=-1
@@ -1409,16 +1434,220 @@ def timepartDialog(QDialog):
             for i, t0 in enumerate(bdry):
                 tp[(time>=t0)&(tp>=0)]=i+1
     def plot(self):
-        colors=['k']+['b', 'g', 'r', 'c', 'm', 'y']*5
+        colors=['k']+['r', 'g', 'c', 'm', 'y', 'b']*5
         cycles=[self.cycleComboBox.currentIndex()-1]
         if cycles[0]<0:
             cycles=range(self.cycletime.shape[0])
         self.calctimepart()
         self.plotw.axes.cla()
-        nofitinds=numpy.array(sorted(set(self.allcycinds)-set(self.cycinds)))
         for cyc in cycles:
             tp=self.timepart[cyc]
             for i in range(-1, self.numpieces):
-                if len(numpy.any(tp==i))>0:
+                if numpy.any(tp==i):
                     self.plotw.axes.plot(self.cycletime[cyc][tp==i], self.yvals[cyc][tp==i], '.', markersize=1, color=colors[i+1])
         self.plotw.fig.canvas.draw()
+
+
+class peakfiteditDialog(QDialog):
+    def __init__(self, parent, X, Y, fitpks, fitfcn, maxpts=9, markersize=1):#only works on one cycle, ie X and Y are 2-d
+        super(peakfiteditDialog, self).__init__(parent)
+
+        self.X=X
+        self.Y=Y
+        self.fitfcn=fitfcn
+        self.fitpks=copy.copy(fitpks)
+        self.sigs=None
+        self.resids=None
+        self.setWindowTitle('Provide the endpoint of segments in a single cycle')
+        
+        self.plotw=plotwidget(self)
+        self.markersize=markersize
+        self.plotw.axes.plot(X, Y, 'k.', ms=self.markersize)
+        QObject.connect(self.plotw, SIGNAL("genericclickonplot"), self.clickprocess)            
+
+#        self.plotw.axes.set_xlabel('cycle time (ms)')
+#        self.plotw.axes.set_ylabel('applied current (mA)')
+            
+        mainlayout=QGridLayout()
+
+        pwid=4
+        nrows_ctrls=5
+        mainlayout.addWidget(self.plotw, 0, 0, nrows_ctrls+maxpts, pwid)
+        
+        fitButton=QPushButton()
+        fitButton.setText("fit for all parameters")
+        QObject.connect(fitButton, SIGNAL("pressed()"), self.fit)
+        
+
+        delButton=QPushButton()
+        delButton.setText("del row")
+        QObject.connect(delButton, SIGNAL("pressed()"), self.delrow)
+
+        addButton=QPushButton()
+        addButton.setText("add row")
+        QObject.connect(addButton, SIGNAL("pressed()"), self.addrow)
+
+        self.rowComboBox=QComboBox()
+        self.rowComboBox.clear()
+        
+        oflabel=QLabel()
+        oflabel.setText('scipy.optimize.fcn:')
+        self.optimizefcnLineEdit=QLineEdit()
+        
+        self.clickforpeakCheckBox=QCheckBox()
+        self.clickforpeakCheckBox.setText('click to add peak')
+        self.clickforpeakCheckBox.setChecked(False)
+        
+        mainlayout.addWidget(oflabel, 0, pwid, 1, 2)
+        mainlayout.addWidget(self.optimizefcnLineEdit, 0, pwid+2, 1, 1)
+        mainlayout.addWidget(self.clickforpeakCheckBox, 1, pwid, 1, 3)
+        
+        mainlayout.addWidget(fitButton, 2, pwid, 1, 3)
+        mainlayout.addWidget(delButton, 3, pwid, 1, 2)
+        mainlayout.addWidget(addButton, 4, pwid, 1, 2)
+        mainlayout.addWidget(self.rowComboBox, 3, pwid+2, 2, 1)
+        
+        Label0=QLabel()
+        Label0.setText('posn')
+        Label1=QLabel()
+        Label1.setText('halfw')
+        Label2=QLabel()
+        Label2.setText('height')
+        mainlayout.addWidget(Label0, nrows_ctrls, pwid, 1, 1)
+        mainlayout.addWidget(Label1, nrows_ctrls, pwid+1, 1, 1)
+        mainlayout.addWidget(Label2, nrows_ctrls, pwid+2, 1, 1)
+        
+        self.range0=(X.min(), X.max())
+        self.range1=(0., X.max()/2.)
+        self.range2=(min(0., Y.min()), max(0., Y.max()))
+        self.LineEditList0=[]
+        self.LineEditList1=[]
+        self.LineEditList2=[]
+        for i in range(maxpts):
+            self.rowComboBox.insertItem(i, `i`)
+            sb0=QLineEdit()
+            sb1=QLineEdit()
+            sb2=QLineEdit()
+#            sb0.setRange(X.min(), X.max())
+#            sb0.setRange(0., X.max()/2.)
+#            sb2.setRange(min(0., Y.min()), max(0., Y.max()))
+#            tsb.setDecimals(3)
+#            csb.setDecimals(3)
+            self.filllineedits()
+            mainlayout.addWidget(sb0, i+1+nrows_ctrls, pwid, 1, 1)
+            mainlayout.addWidget(sb1, i+1+nrows_ctrls, pwid+1, 1, 1)
+            mainlayout.addWidget(sb2, i+1+nrows_ctrls, pwid+2, 1, 1)
+#            QObject.connect(tsb, SIGNAL("valueChanged(double)"), self.plotsegments)
+#            QObject.connect(csb, SIGNAL("valueChanged(double)"), self.plotsegments)
+            self.LineEditList0+=[sb0]
+            self.LineEditList1+=[sb1]
+            self.LineEditList2+=[sb2]
+        
+        self.rowComboBox.setCurrentIndex(0)
+        
+        plotButton=QPushButton()
+        plotButton.setText('plot segments')
+        QObject.connect(plotButton, SIGNAL("pressed()"), self.plotall)
+        
+        self.buttonBox = QDialogButtonBox(self)
+        self.buttonBox.setGeometry(QRect(520, 195, 160, 26))
+        self.buttonBox.setOrientation(Qt.Horizontal)
+        self.buttonBox.setStandardButtons(QDialogButtonBox.Ok)
+        QObject.connect(self.buttonBox, SIGNAL("accepted()"), self.accept)
+        mainlayout.addWidget(plotButton, nrows_ctrls+maxpts+1, pwid, 1, 3)
+        mainlayout.addWidget(self.buttonBox, nrows_ctrls+maxpts+1, 0, 1, pwid)
+        
+        QObject.connect(self.buttonBox,SIGNAL("accepted()"),self.ExitRoutine)
+        
+        self.setLayout(mainlayout)
+    
+    def clickprocess(self, coords):
+        if self.clickforpeakCheckBox.isChecked():
+            self.readdata()
+            j=len(self.fitpks)
+            if j<len(self.LineEditList0):
+                self.LineEditList0[j].setText('%.3e' %coords[0])
+                self.LineEditList1[j].setText('10')
+                self.LineEditList2[j].setText('%.3e' %coords[1])
+    def filllineedits(self):
+        for i in range(len(self.LineEditList0)):
+            if i<len(self.fitpks): 
+                self.LineEditList0[i].setText('%.3e' %self.fitpks[i][0])
+                self.LineEditList1[i].setText('%.3e' %self.fitpks[i][1])
+                self.LineEditList2[i].setText('%.3e' %self.fitpks[i][2])
+            else:
+                self.LineEditList0[i].setText('')
+                self.LineEditList1[i].setText('')
+                self.LineEditList2[i].setText('')
+
+    def addrow(self):
+        ind=self.rowComboBox.currentIndex()
+        for i in range(ind+1, len(self.LineEditList0))[::-1]:
+            self.LineEditList0[i].setText(self.LineEditList0[i-1].text())
+            self.LineEditList1[i].setText(self.LineEditList1[i-1].text())
+            self.LineEditList2[i].setText(self.LineEditList2[i-1].text())
+
+    def delrow(self):
+        ind=self.rowComboBox.currentIndex()
+        if ind==(len(self.LineEditList0)-1):
+            return
+        for i in range(ind, len(self.LineEditList0)-1):
+            self.LineEditList0[i].setText(self.LineEditList0[i+1].text())
+            self.LineEditList1[i].setText(self.LineEditList1[i+1].text())
+            self.LineEditList2[i].setText(self.LineEditList2[i+1].text())
+        self.LineEditList0[-1].setText('')
+        self.LineEditList1[-1].setText('')
+        self.LineEditList2[-1].setText('')
+
+    
+    def fit(self):#the analysis is done with normalization of the array so it is insensitive to 'Aunit'. Also, the data time interval is not used in the derivative calculation
+        self.readdata()
+        try:
+            s=str(self.optimizefcnLineEdit.text())
+            optimizerfcn=eval(s)
+        except:
+            if s!='':
+                print 'optimize function ', s, ' not understood'
+            optimizerfcn=None
+        self.fitpks, self.sigs, self.resid=fitpeakset(self.X, self.Y, self.fitpks, self.fitfcn, optimizerfcn=optimizerfcn)
+        self.filllineedits()
+        
+    def plotall(self):
+        self.readdata()
+        self.plotw.axes.cla()
+        self.plotw.axes.plot(self.X, self.Y, 'k.', ms=self.markersize)
+        fitYarr=numpy.float32([self.fitfcn(p, self.X) for p in self.fitpks])
+        cols=['k', 'y', 'b', 'm', 'g', 'c', 'r']*10#just to be sure there's enough
+        for count, arr in enumerate(fitYarr):
+            self.plotw.axes.plot(self.X, arr, cols[i]+'--', lw=self.markersize)
+        fitYall=fitYarr.sum(axis=0)
+        self.plotw.axes.plot(self.X, fitYall, 'r', lw=self.markersize)
+        self.resid=(((fitYall-self.Y)**2)**.5).sum()
+        self.plotw.fig.canvas.draw()
+
+    def readdata(self):
+        j=0
+        allvals=[]
+        for i in range(len(self.LineEditList0)):
+            strs=[str(le.text()) for le in [self.LineEditList0[j], self.LineEditList1[j], self.LineEditList2[j]]]
+            if numpy.any([len(s)==0 for s in strs]):
+                continue
+            try:
+                vals=[myeval(s) for s in strs]
+                j+=1
+            except:
+                self.rowComboBox.setCurrentIndex(j)
+                self.delrow()
+            vals=[min(h, max(v, l)) for v, (l, h) in zip(vals, [self.range0, self.range1, self.range2])]
+            allvals+=[vals]
+        temp=numpy.float32(allvals)
+        if not (len(temp)==len(self.fitpks) and numpy.all(temp==self.fitpks)):
+            sigs=numpy.zeros(temp.shape, dtype='float32')
+        self.fitpks=temp
+        
+    def ExitRoutine(self):
+        #self.readdata()
+        self.plotall()
+        
+    def savefig(self, p, dpi=300):
+        self.plotw.fig.savefig(p, dpi=dpi)

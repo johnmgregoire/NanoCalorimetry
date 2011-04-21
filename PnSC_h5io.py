@@ -13,6 +13,16 @@ v=numpy.linspace(-16,16,5)
 xmm=numpy.float32([x for i in range(5) for x in v])
 ymm=numpy.float32([x for x in v[::-1] for i in range(5)])
 
+def myeval(c):
+    if c=='None':
+        c=None
+    else:
+        temp=c.lstrip('0')
+        if (temp=='' or temp=='.') and '0' in c:
+            c=0
+        else:
+            c=eval(temp)
+    return c
 def createh5file(h5path):
     if os.path.exists(h5path):
         mode='r+'
@@ -231,30 +241,53 @@ def saveSCcalculations(h5path, h5expname, h5hpname, hpsegdlist, recname):
         else:
             h5fg=h5g.create_group(k)
         for n, d in enumerate(hpsegdlist):
-            if `n` in h5fg:
-                del h5fg[`n`]
-            ds=h5g.create_dataset(`n`, data=d[k])
-            ds.attrs['recipe']=recname
+            if k in d.keys():
+                if `n` in h5fg:
+                    del h5fg[`n`]
+                ds=h5fg.create_dataset(`n`, data=d[k])
+                ds.attrs['recipe']=recname
+    
+    #now save profile analysis
+    savekeys=set([k for d in hpsegdlist for k in d.keys() if k.startswith('PROFILEANALYSIS_') and not ('~' in k or k in h5hp[h5hpname] or k=='cycletime') and isinstance(d[k], dict)])
+    for k in list(savekeys):
+        if k in h5g:
+            h5pa=h5g[k]
+        else:
+            h5pa=h5g.create_group(k)
+        for n, d in enumerate(hpsegdlist):
+            if k in d.keys():
+                if `n` in h5pa:
+                    h5pac=h5pa[`n`]
+                else:
+                    h5pac=h5pa.create_group(`n`)
+                for arrk, arr in d[k].iteritems():
+                    if isinstance(arr, numpy.ndarray):
+                        if arrk in h5pac:
+                            del h5pac[arrk]
+                        ds=h5pac.create_dataset(arrk, data=arr)
+                        ds.attrs['recipe']=recname
+                
     h5file.close()
 def getfitdictlist_hp(h5path, h5expname, h5hpname):
     hpsdl=CreateHeatProgSegDictList(h5path, h5expname, h5hpname)
     h5file=h5py.File(h5path, mode='r')
     fitdlist=[]
-    for k in hpsdl[0].keys():
+    for k in set([k for d in hpsdl for k in d.keys()]):
         for i in range(len(hpsdl)):
             temp=getfitdict_nameseg(h5file, h5expname, h5hpname, k, i)
             if not temp is None:
                 fitdlist+=[temp]
     h5file.close()
+    return fitdlist
 def getfitdict_nameseg(h5pf, h5expname, h5hpname, dsname, seg):
     if isinstance(h5pf, str):
         h5file=h5py.File(h5pf, mode='r')
     else:
         h5file=h5pf
     try:
-        getcalanalysis(h5file, h5expname)[h5hpname]
+        h5ang=getcalanalysis(h5file, h5expname)[h5hpname]
         nam='FITPARS_'+dsname
-        ds=[nam][`seg`]
+        ds=h5ang[nam][`seg`]
         h5rg=getSCrecipegrp(h5file, h5expname)[ds.attrs['recipe']]
         for fcnname in h5rg.attrs['fcns']:
             g=h5rg[fcnname]
@@ -264,9 +297,12 @@ def getfitdict_nameseg(h5pf, h5expname, h5hpname, dsname, seg):
         d['seg']=seg
         d['dsname']=dsname
         d['fitpars']=ds[:, :]
-        d['fcnname']=[fcnname]
+        d['fcnname']=fcnname
         for k in ['parnames', 'segdkeys', 'filters', 'postfilter']:
-            d[k]=h5r.attrs[k]
+            temp=g.attrs[k]
+            if isinstance(temp, numpy.ndarray):#these are all list of strings stored as arrays so return them to lists
+                temp=list(temp)
+            d[k]=temp
     except:
         d=None
     if isinstance(h5pf, str):
@@ -295,7 +331,7 @@ def experimentgrppaths(h5pf):
         h5file=h5pf
     p=[]
     for pnt in h5file['Calorimetry'].values():
-        if isinstance(pnt, h5py.Group):
+        if isinstance(pnt, h5py.Group) and 'measurement' in pnt and 'analysis' in pnt:
             p+=[pnt.name]
     if isinstance(h5pf, str):
         return h5file, p
@@ -384,6 +420,8 @@ def getfilter(h5pf, h5expname, filtername):
     d={}
     for k, v in h5filter[filtername].attrs.iteritems():
         d[k]=(v=='None' and (None,) or (v,))[0]
+        if isinstance(d[k], numpy.ndarray):
+            d[k]=list(d[k])
     if isinstance(h5pf, str):
         return h5file, d
     return d
@@ -404,6 +442,8 @@ def getfilterdict(h5pf, h5expname):
             nam=pnt.name.rpartition('/')[2]
             for k, v in pnt.attrs.iteritems():
                 d[k]=(v=='None' and (None,) or (v,))[0]
+                if isinstance(d[k], numpy.ndarray):
+                    d[k]=list(d[k])
             if len(d.keys())==0:
                 continue
             filterd[nam]=d

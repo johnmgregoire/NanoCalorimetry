@@ -85,7 +85,9 @@ class MainMenu(QMainWindow):
         self.expandexceptPushButton.setText('Expand Groups')
         QObject.connect(self.expandexceptPushButton, SIGNAL("pressed()"), self.expandgrouptree)
         
-        if not previousmm is None:
+        if previousmm is None:
+            self.on_action_openh5_triggered()
+        else:
             oldselection=mm.geth5selectionpath(liststyle=True, removeformatting=False)
             self.h5path=previousmm.h5path
             h5file=h5py.File(self.h5path, mode='r')
@@ -158,6 +160,8 @@ class MainMenu(QMainWindow):
         self.action_delan=MainMenuQAction(self,'action_delan', 'Delete analysis Group (select analysis group)', self.anmenu, [('h5open', [True]),  ('selectiongrouptype', ['analysis'])], self.ActionDict)
         self.action_screcipe=MainMenuQAction(self,'action_screcipe', 'Build SC analysis recipe (select heat program)', self.anmenu, [('h5open', [True]),  ('selectiongrouptype', ['heatprogram'])], self.ActionDict)
         self.action_fitlossrecipe=MainMenuQAction(self,'action_fitlossrecipe', 'Build heat loss fit model recipe (select heat program)', self.anmenu, [('h5open', [True]),  ('selectiongrouptype', ['heatprogram']), ('samplepowerperrateexists', [True])], self.ActionDict)
+        self.action_heatcaprecipe=MainMenuQAction(self,'action_heatcaprecipe', 'Build heat capacity recipe (select heat program)', self.anmenu, [('h5open', [True]),  ('selectiongrouptype', ['heatprogram']), ('samplepowerperrateexists', [True])], self.ActionDict)
+        self.action_heatcappeaksrecipe=MainMenuQAction(self,'action_heatcappeaksrecipe', 'Build C(T) peak search+fit recipe (select heat program)', self.anmenu, [('h5open', [True]),  ('selectiongrouptype', ['heatprogram']), ('samplepowerperrateexists', [True])], self.ActionDict)
         self.action_applyscrecipe=MainMenuQAction(self,'action_applyscrecipe', 'Apply SC analysis recipe (select experiment or heat program)', self.anmenu, [('h5open', [True]),  ('selectiongrouptype', ['experiment', 'heatprogram'])], self.ActionDict)
         
         self.setMenuBar(self.main_menu_pulldown)
@@ -536,9 +540,10 @@ class MainMenu(QMainWindow):
         pathlist=self.geth5selectionpath(liststyle=True)
         self.data=getfitdictlist_hp(self.h5path, pathlist[1], pathlist[4])
         hpsdl=CreateHeatProgSegDictList(self.h5path, pathlist[1], pathlist[4])
-        fitviewer(self, hpsdl, self.data)
+        h5file, filterdict=getfilterdict(self.h5path, pathlist[1])
+        h5file.close()
+        fitviewer(self, hpsdl, self.data, filterdict)
 
-        
     @pyqtSignature("")
     def on_action_delan_triggered(self):
         path=self.geth5selectionpath(liststyle=False)
@@ -571,6 +576,27 @@ class MainMenu(QMainWindow):
         h5file=h5py.File(self.h5path, mode='r')
         fillh5tree(self.treeWidget, h5file, selectionpathlist=oldselection)
         h5file.close()
+        
+    @pyqtSignature("")
+    def on_action_heatcaprecipe_triggered(self):
+        pathlist=self.geth5selectionpath(liststyle=True)
+        idialog=SCrecipeDialog(self, self.h5path, pathlist[1], pathlist[4], calctype='QUC')
+        idialog.show()
+        oldselection=self.geth5selectionpath(liststyle=True, removeformatting=False)
+        h5file=h5py.File(self.h5path, mode='r')
+        fillh5tree(self.treeWidget, h5file, selectionpathlist=oldselection)
+        h5file.close()
+    
+    @pyqtSignature("")
+    def on_action_heatcappeaksrecipe_triggered(self):
+        pathlist=self.geth5selectionpath(liststyle=True)
+        idialog=SCrecipeDialog(self, self.h5path, pathlist[1], pathlist[4], calctype='CTpk')
+        idialog.show()
+        oldselection=self.geth5selectionpath(liststyle=True, removeformatting=False)
+        h5file=h5py.File(self.h5path, mode='r')
+        fillh5tree(self.treeWidget, h5file, selectionpathlist=oldselection)
+        h5file.close()
+    
     @pyqtSignature("")
     def on_action_applyscrecipe_triggered(self):
         pathlist=self.geth5selectionpath(liststyle=True)
@@ -621,3 +647,107 @@ def start(previousmm=None):
 
 mm=start()
 print 'done'
+
+#fitd=getfitdictlist_hp(mm.h5path, 'heat1a','2010Nov27_Cell2_61mA_50ms_500ms_cool_1C')[0]
+#segd=CreateHeatProgSegDictList(mm.h5path, 'heat1a', '2010Nov27_Cell2_61mA_50ms_500ms_cool_1C')[2]
+#
+#
+#fild={}
+#
+#fild['reggrid']={'gridinterval':0.2}
+#fild['peaksearch']={'pkfcn':'GaussHalfLorentz', 'critpeakheight':5.e-7, 'critsep':20., 'firstdernpts':10, 'firstderorder':1, 'secdernpts':20, 'secderorder':1, 'critcurve':None, 'pospeaks':1, 'negpeaks':1}
+#def Cpk_secder(segd, fild, C, T, h5path=None, h5expname=None, h5hpname=None):
+#    C=('sampleheatcapacity', 'peaksearch')
+#    T=('sampletemperature', 'reggrid')
+#for tup in [C, T]:
+#    (segkey, filkey)=tup
+#    if not '~'.join(tup) in segd.keys():
+#        segd['~'.join(tup)]=performgenericfilter(segd[segkey], fild[filkey])
+#    #if True in [v>0 for k, v in fild[filkey].iteritems() if 'deriv' in k]: #this handle deriv filters other than SG but if the deriv is not wrt dt something needs to change
+#    #    segd['~'.join(tup)]/=dt
+#C_=segd['~'.join(C)]
+#T_=segd['~'.join(T)]
+#(segkey, filkey)=T
+#dx=fild[filkey]['gridinterval']
+#(segkey, filkey)=C
+#ch=fild[filkey]['critpeakheight']
+#cs=fild[filkey]['critsep']/dx
+#fp=fild[filkey]['firstdernpts']
+#fo=fild[filkey]['firstderorder']
+#sp=fild[filkey]['secdernpts']
+#so=fild[filkey]['secderorder']
+#
+#X=T_[0]
+#Y=C_[0]
+#Xgrid=numpy.linspace(X.min(), X.max(), (X.max()-X.min())/dx+1)
+#Ygrid=numpy.empty(Xgrid.shape, dtype='float32')
+#gridind=[numpy.argmin((x-Xgrid)**2) for x in X]
+#indsgot=numpy.sort(numpy.uint32(list(set(gridind))))
+#indsinterp=numpy.sort(numpy.uint32(list(set(range(len(Xgrid)))-set(gridind))))
+#gridind=numpy.uint32(gridind)
+#for i in indsgot:
+#    Ygrid[i]=Y[gridind==i].mean()
+#Ygrid[indsinterp]=numpy.float32(scipy.interpolate.interp1d(indsgot, Ygrid[indsgot])(indsinterp))
+#
+#import pylab
+#pylab.plot(X, Y, 'b.', markersize=1)
+#pylab.plot(Xgrid, Ygrid, 'k-', lw=1)
+#
+##pkind=peaksearch1dSG(Ygrid, dx=dx, critcounts=ch, critsepind=cs, critcurve=None, max_withincritsep=False, firstdernpts=fp, firstderorder=fo, secdernpts=sp, secderorder=so)
+#x=Ygrid
+#dx=dx
+#critcounts=ch
+#critsepind=cs
+#critcurve=None
+#max_withincritsep=False
+#firstdernpts=fp
+#firstderorder=fo
+#secdernpts=sp
+#secderorder=so
+#ifirstder=savgolsmooth(x, nptsoneside=firstdernpts, order=firstderorder, dx=dx, deriv=1)
+#zeroind=arrayzeroind1d(ifirstder, postoneg=True)
+#temp=numpy.where(x[(numpy.uint32(numpy.round(zeroind)),)]>critcounts)
+#fullpkind=zeroind[temp]
+#if fullpkind.size==0:
+#    print '#$%^#$%^#%&$%^&'
+#pkind=clustercoordsbymax1d(x, numpy.uint32(numpy.round(fullpkind)), critsepind)
+#if critcurve is not None:
+#    isecder=savgolsmooth(x, nptsoneside=secdernpts, order=secderorder, dx=dx, deriv=2)
+#    temp=numpy.where(isecder[(numpy.uint32(numpy.round(pkind)),)]<(-1*critcurve))
+#    pkind=numpy.array(pkind)[temp]
+##    pkind=list(pkind)
+##    pkind.reverse()#highest to smallest for pairing below
+#pkind=numpy.array(pkind, dtype=numpy.float32)
+#pkht=Ygrid[numpy.uint32(numpy.round(pkind))]
+#pkposn=Xgrid[numpy.uint32(numpy.round(pkind))]
+#iarr=numpy.uint32(range(len(Xgrid)))
+#hwposns1=[(numpy.any((Ygrid<(h/2.))&(iarr>i)) and (numpy.where((Ygrid<(h/2.))&(iarr>i))[0][0],) or (i,))[0] for i, h in zip(pkind, pkht)]
+#hwposns0=[(numpy.any((Ygrid<(h/2.))&(iarr<i)) and (numpy.where((Ygrid<(h/2.))&(iarr<i))[0][0],) or (i,))[0] for i, h in zip(pkind, pkht)]
+#pkhw=dx*(numpy.float32(hwposns1)+numpy.float32(hwposns0))/2.
+#pylab.plot(Xgrid[numpy.uint32(numpy.round(pkind))], Ygrid[numpy.uint32(numpy.round(pkind))], 'ro')
+#
+#pks=numpy.float32([pkposn, pkhw, pkht]).T#, numpy.ones(pkht.shape, dtype='float32')*.5]).T
+#
+#pkfcn=PeakFcnLibrary[fild[filkey]['pkfcn']]
+#
+#pars, sigs, resid=fitpeakset(X, Y, pks, GaussHalfLorentz)
+#
+#
+#
+#fitY=numpy.float32([GaussHalfLorentz(p, X) for p in pars]).sum(axis=0)
+#gridfitY=numpy.float32([GaussHalfLorentz(p, Xgrid) for p in pars]).sum(axis=0)
+#igridfitY=numpy.float32([gridfitY[:i+1].sum() for i in range(len(Xgrid))])*dx
+#print igridfitY[-1]
+#critval0_iY=igridfitY[-1]/25.
+#critval1_iY=igridfitY[-1]/5.
+#critval2_iY=igridfitY[-1]/2.
+#print Xgrid[igridfitY>critval0_iY][0]
+#print Xgrid[igridfitY>critval1_iY][0]
+#print Xgrid[igridfitY>critval2_iY][0]
+#
+#
+#pylab.plot(X, fitY, 'r-')
+#pylab.show()
+
+
+

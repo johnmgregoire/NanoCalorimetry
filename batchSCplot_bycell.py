@@ -44,6 +44,7 @@ exp_rec=[\
 ('heat7',[(2, 'sampletemperature', 'samplepowerperrate', (nskip, -1*nskip)), (3, 'sampletemperature', 'samplepowerperrate', (nskip, -1*nskip))]),\
 ('heat8',[(2, 'sampletemperature', 'samplepowerperrate', (nskip, -1*nskip)), (4, 'sampletemperature', 'samplepowerperrate', (nskip, -25*nskip))]),\
 ]
+
 p='E:/CHESS2010PnSC/AuSiCu_pnsc_all.h5'
 #p=mm.h5path
 #f=h5py.File(p, mode='r+')
@@ -58,7 +59,6 @@ for exp, plotlist in exp_rec:
     f, hppaths=experimenthppaths(p, exp)
     f.close()
     for hpp in hppaths:
-        pylab.figure(figsize=(10, 8))
         h5hpname=hpp.rpartition('/')[2]
         f, g=gethpgroup(p, exp, h5hpname=h5hpname)
         cell=g.attrs['CELLNUMBER']
@@ -78,6 +78,7 @@ for cellcount, (pi0, pi1) in enumerate(zip(plotinfo0, plotinfo1)):
         continue
 
     titles=['heating cell%02d' %(cellcount+1), 'cooling cell%02d' %(cellcount+1)]
+    pylab.figure(figsize=(10, 8))
     for count, pi in enumerate([pi0, pi1]):
         pylab.subplot(2, 1, count+1)
         yc=numpy.float32([])
@@ -110,7 +111,10 @@ for cellcount, (pi0, pi1) in enumerate(zip(plotinfo0, plotinfo1)):
         pylab.ylabel('P / dT/dt')
         pylab.gca().yaxis.set_major_formatter(ExpTickLabels)
     pylab.subplots_adjust(left=.1, right=.97, top=.93, bottom=.08, wspace=.25, hspace=.25)
-#    pylab.show()
+    pylab.show()
+    idialog=messageDialog(title='continue')
+    if not idialog.exec_():
+        break
 #    break
-    pylab.savefig(os.path.join(savef,'SCcellplot_cell%02d' %(cellcount+1)+'.png'))
+#    pylab.savefig(os.path.join(savef,'SCcellplot_cell%02d' %(cellcount+1)+'.png'))
     pylab.clf()

@@ -29,25 +29,32 @@ class SCrecipeDialog(QDialog):
         self.h5hpname=h5hpname
         self.hpsegdlist=CreateHeatProgSegDictList(h5path, h5expname, h5hpname)
         
+        self.calctype=calctype
+        
         self.setWindowTitle('SC analysis recipe editor')
         
         self.parLayout = QVBoxLayout()
         self.pardlist=[]
         self.filterd={}
         self.filterd['None']=self.Nonefilterdict()
-        self.filterd['dflt']=self.dfltfilterdict(deriv=0)
         
-        if calctype=='RTPSD':
+        if self.calctype=='RTPSD':
             ncalcs=self.RTPSDsetup()
+            self.filterd['dflt']=self.dfltfilterdict(deriv=0)
             self.filterd['dt_dflt']=self.dfltfilterdict(deriv=1)
-        elif calctype=='FitPS':
+        elif self.calctype=='FitPS':
+            ncalcs=self.FitPSsetup()
             for d in self.dfltfitfilterdicts():
                 self.filterd[d['name']]=copy.deepcopy(d)
-        elif calctype=='QUC':
+        elif self.calctype=='QUC':
             ncalcs=self.QUCsetup()
-            self.filterd['Qdflt']=self.Qfilterdict(par)
-            self.filterd['refdflt']=self.reffilterdict(par)
-            
+            self.filterd['fiteval']=self.fitevalfilterdflt()
+            #self.filterd['Qdflt']=self.Qfilterdict(par)
+            #self.filterd['refdflt']=self.reffilterdict(par)
+        elif self.calctype=='CTpk':
+            ncalcs=self.CTpksetup()
+            self.filterd['gridata']=self.griddatafilterdflt()
+            self.filterd['peaksearchfit']=self.peakfitfilterdflt()
 
         #*****************************************************
         importfiltersButton=QPushButton()
@@ -137,11 +144,12 @@ class SCrecipeDialog(QDialog):
         QObject.connect(self.buttonBox, SIGNAL("accepted()"), self.ExitRoutine)
         QMetaObject.connectSlotsByName(self)
         
-        self.slidermoved0()
-        self.slidermoved1()
-        self.slidermoved2()
-        self.slidermoved3()
-        self.slidermoved4()
+        self.updateparwidgets()
+#        self.slidermoved0()
+#        self.slidermoved1()
+#        self.slidermoved2()
+#        self.slidermoved3()
+#        self.slidermoved4()
     
     def RTPSDsetup(self):
         d=self.calclayoutgen('R', [''])
@@ -206,71 +214,99 @@ class SCrecipeDialog(QDialog):
         return 5
 
     def FitPSsetup(self):
-        d=self.calclayoutgen('pt', ['none', 'user-def', 'autocalc'])
+        d=self.calclayoutgen('pt', ['none', 'use existing','user-def', 'autocalc'])
         self.parLayout.addWidget(d['widget'])
         d['savename']='cyclepartition'
-        d['fcns']=[pt_none, pt_user, pt_calc]
-        d['parnames']=[['t'], ['t', 'D'], ['t', 'D']]
-        d['segdkeys']=[['cycletime'], ['cycletime', 'samplepowerperrate'], ['cycletime', 'samplepowerperrate']]
-        d['postcombofcns']=[self.nofilterfill, self.nofilterfill, self.nofilterfill]
-        d['parcombofcns']=[[], [self.timepartfilterfill, self.filterfill], [self.timepartfilterfill, self.filterfill]]
+        d['fcns']=[pt_none, useexisting, pt_user, pt_calc]
+        d['parnames']=[['t'], ['x'], ['t', 'D'], ['t', 'D']]
+        d['segdkeys']=[['cycletime'], ['cyclepartition'], ['cycletime', 'samplepowerperrate'], ['cycletime', 'samplepowerperrate']]
+        d['postcombofcns']=[self.nofilterfill, self.nofilterfill, self.nofilterfill, self.nofilterfill]
+        d['parcombofcns']=[[self.nofilterfill], [self.nofilterfill], [self.timepartfilterfill, self.filterfill], [self.timepartfilterfill, self.filterfill]]
         d['slider'].setMaximum(len(d['parnames'])-1)
         self.pardlist+=[copy.copy(d)]
         QObject.connect(d['slider'], SIGNAL("sliderReleased()"), self.slidermoved0)
         
-        d=self.calclayoutgen('Dfit', ['c(t)+dT+eT^2+fT^3+gT^4', 'c(t)+k<dT>+aT4'])
+        d=self.calclayoutgen('Dfit', ['c(t)+eT+fT^2+gT^3+hT^4', 'c(t)+eT+fT^2+hT^4','c(t)+et+ft^2+gt^3+ht^4', 'c(t)+et+ft^2+gt^3+ht^4+it^5'])#'c(t)+k<dT>+aT4'])
         self.parLayout.addWidget(d['widget'])
-        d['savename']='FITPARS_sampleheatloss'
-        d['fcns']=[polyorder4_T, pieceC_T4_intdT]
-        d['parnames']=[['c','T', 'D'], ['c','T', 'dT', 'D']]
-        d['segdkeys']=[['cyclepartition','sampletemperature', 'samplepowerperrate'], ['cyclepartition', 'sampletemperature', 'sampleheatrate', 'samplepowerperrate']]
-        d['postcombofcns']=[self.nofilterfill, self.nofilterfill]
-        d['parcombofcns']=[[self.fitfilterfill, self.fitfilterfill, self.filterfill], [self.fitfilterfill, self.fitfilterfill, self.integfilterfill, self.filterfill]]
-        d['slider'].setMaximum(len(d['parnames'])-1)
-        self.pardlist+=[copy.copy(d)]
-        QObject.connect(d['slider'], SIGNAL("sliderReleased()"), self.slidermoved0)
-        
-        return 2
-    
-    def QUCsetup(self):
-        d=self.calclayoutgen('Q', ['Qref','Qo+kA<T>+esA<T4>'])
-        self.parLayout.addWidget(d['widget'])
-        d['savename']='sampleheatloss'
-        d['fcns']=[Q_ref, Q_T]
-        d['parnames']=[['T'], ['T']]
-        d['segdkeys']=[['sampletemperature'], ['sampletemperature']]
-        d['postcombofcns']=[self.filterfill, self.filterfill]
-        d['parcombofcns']=[[self.refpathfilterfill], [self.Qmodelfilterfill]]#these filters need to be worked on
-        d['slider'].setMaximum(len(d['parnames'])-1)
-        self.pardlist+=[copy.copy(d)]
-        QObject.connect(d['slider'], SIGNAL("sliderReleased()"), self.slidermoved0)
-        
-        d=self.calclayoutgen('U', ['Uref','Q/S'])
-        self.parLayout.addWidget(d['widget'])
-        d['savename']='sampleheatlossperrate'
-        d['fcns']=[U_ref, U_QS]
-        d['parnames']=[['T'], ['Q', 'S']]
-        d['segdkeys']=[['sampletemperature'], ['sampleheatloss', 'sampleheatrate']]
-        d['postcombofcns']=[self.filterfill, self.filterfill]
-        d['parcombofcns']=[[self.refpathfilterfill], [self.filterfill, self.filterfill]]
+        d['savename']='FITPARS_samplepowerperrate'
+        d['fcns']=[FIT_T4, FIT_T0124, FIT_t4, FIT_t5]#pieceC_T4_intdT]
+        d['parnames']=[['c','T', 'D'], ['c','T', 'D'], ['c','t', 'D'], ['c','t', 'D']]#['c','T', 'dT', 'D']]
+        d['segdkeys']=[['cyclepartition','sampletemperature', 'samplepowerperrate'], ['cyclepartition','sampletemperature', 'samplepowerperrate'], ['cyclepartition','cycletime', 'samplepowerperrate'], ['cyclepartition','cycletime', 'samplepowerperrate']]#['cyclepartition', 'sampletemperature', 'sampleheatrate', 'samplepowerperrate']]
+        d['postcombofcns']=[self.nofilterfill, self.nofilterfill, self.nofilterfill, self.nofilterfill]
+        d['parcombofcns']=[[self.fitfilterfill, self.fitfilterfill, self.filterfill], [self.fitfilterfill, self.fitfilterfill, self.filterfill], [self.fitfilterfill, self.fitfilterfill, self.filterfill], [self.fitfilterfill, self.fitfilterfill, self.filterfill]]#[self.fitfilterfill, self.fitfilterfill, self.integfilterfill, self.filterfill]]
         d['slider'].setMaximum(len(d['parnames'])-1)
         self.pardlist+=[copy.copy(d)]
         QObject.connect(d['slider'], SIGNAL("sliderReleased()"), self.slidermoved1)
         
-        d=self.calclayoutgen('C', ['D-U','(P-Q)/S'])
+        return 2
+    
+    def QUCsetup(self):
+        d=self.calclayoutgen('C', ['D-Dfit'])
         self.parLayout.addWidget(d['widget'])
         d['savename']='sampleheatcapacity'
-        d['fcns']=[C_DU, C_PQS]
-        d['parnames']=[['D', 'U'], ['P', 'Q', 'S']]
-        d['segdkeys']=[['samplepowerperrate', 'sampleheatlossperrate'], ['samplepower', 'sampleheatloss', 'sampleheatrate']]
-        d['postcombofcns']=[self.filterfill, self.filterfill]
-        d['parcombofcns']=[[self.filterfill, self.filterfill], [self.filterfill, self.filterfill, self.filterfill]]
+        d['fcns']=[C_Dfit]
+        d['parnames']=[['D', 'pt']]
+        d['segdkeys']=[['samplepowerperrate', 'cyclepartition']]
+        d['postcombofcns']=[self.filterfill]
+        d['parcombofcns']=[[self.filterfill, self.fitevalfilterfill]]
         d['slider'].setMaximum(len(d['parnames'])-1)
         self.pardlist+=[copy.copy(d)]
-        QObject.connect(d['slider'], SIGNAL("sliderReleased()"), self.slidermoved2)
+        QObject.connect(d['slider'], SIGNAL("sliderReleased()"), self.slidermoved0)
+
+
+#        d=self.calclayoutgen('Q', ['Qref','Qo+kA<T>+esA<T4>'])
+#        self.parLayout.addWidget(d['widget'])
+#        d['savename']='sampleheatloss'
+#        d['fcns']=[Q_ref, Q_T]
+#        d['parnames']=[['T'], ['T']]
+#        d['segdkeys']=[['sampletemperature'], ['sampletemperature']]
+#        d['postcombofcns']=[self.filterfill, self.filterfill]
+#        d['parcombofcns']=[[self.refpathfilterfill], [self.Qmodelfilterfill]]#these filters need to be worked on
+#        d['slider'].setMaximum(len(d['parnames'])-1)
+#        self.pardlist+=[copy.copy(d)]
+#        QObject.connect(d['slider'], SIGNAL("sliderReleased()"), self.slidermoved0)
+#        
+#        d=self.calclayoutgen('U', ['Uref','Q/S'])
+#        self.parLayout.addWidget(d['widget'])
+#        d['savename']='sampleheatlossperrate'
+#        d['fcns']=[U_ref, U_QS]
+#        d['parnames']=[['T'], ['Q', 'S']]
+#        d['segdkeys']=[['sampletemperature'], ['sampleheatloss', 'sampleheatrate']]
+#        d['postcombofcns']=[self.filterfill, self.filterfill]
+#        d['parcombofcns']=[[self.refpathfilterfill], [self.filterfill, self.filterfill]]
+#        d['slider'].setMaximum(len(d['parnames'])-1)
+#        self.pardlist+=[copy.copy(d)]
+#        QObject.connect(d['slider'], SIGNAL("sliderReleased()"), self.slidermoved1)
+#        
+#        d=self.calclayoutgen('C', ['D-U','(P-Q)/S'])
+#        self.parLayout.addWidget(d['widget'])
+#        d['savename']='sampleheatcapacity'
+#        d['fcns']=[C_DU, C_PQS]
+#        d['parnames']=[['D', 'U'], ['P', 'Q', 'S']]
+#        d['segdkeys']=[['samplepowerperrate', 'sampleheatlossperrate'], ['samplepower', 'sampleheatloss', 'sampleheatrate']]
+#        d['postcombofcns']=[self.filterfill, self.filterfill]
+#        d['parcombofcns']=[[self.filterfill, self.filterfill], [self.filterfill, self.filterfill, self.filterfill]]
+#        d['slider'].setMaximum(len(d['parnames'])-1)
+#        self.pardlist+=[copy.copy(d)]
+#        QObject.connect(d['slider'], SIGNAL("sliderReleased()"), self.slidermoved2)
 
         return 3
     
+    def CTpksetup(self):
+        d=self.calclayoutgen('Cpk', ['C(T) peaks'])
+        self.parLayout.addWidget(d['widget'])
+        d['savename']='PROFILEANALYSIS_sampleheatcapacity_sampletemperature'
+        d['fcns']=[CTpks_secder]
+        d['parnames']=[ ['C', 'T']]
+        d['segdkeys']=[['sampleheatcapacity', 'sampletemperature']]
+        d['postcombofcns']=[self.nofilterfill, self.nofilterfill]
+        d['parcombofcns']=[[self.peakfitfilterfilterfill, self.griddatafilterfill]]
+        d['slider'].setMaximum(len(d['parnames'])-1)
+        self.pardlist+=[copy.copy(d)]
+        QObject.connect(d['slider'], SIGNAL("sliderReleased()"), self.slidermoved0)
+        
+        return 1
+
     def ExitRoutine(self):
         if self.saveCheckBox.isChecked():
             self.savefilters()
@@ -293,6 +329,8 @@ class SCrecipeDialog(QDialog):
         for d in self.pardlist:
             recd={}
             ind=d['slider'].sliderPosition()
+            if d['fcns'][ind] is None:
+                continue
             fcns+=[d['fcns'][ind].func_name]
             recd['segdkeys']=d['segdkeys'][ind]
             a, b=zip(*[[nam, str(cb.currentText())] for nam, cb in zip(d['parnames'][ind], d['parcombos'])])#names and cb put together to control which cb are used
@@ -305,6 +343,10 @@ class SCrecipeDialog(QDialog):
         return True
         
     def calcall(self):
+        if self.calctype=='FitPS':
+            xdata=[]
+            fitans=[]
+            fitdata=[]
         partups=[('fild', self.filterd)]
         partups+=[(a, b) for a, b in zip(['h5path', 'h5expname', 'h5hpname'], [self.h5path, self.h5expname, self.h5hpname])]
         seginds=self.segcalcoptions[self.segComboBox.currentIndex()]
@@ -317,6 +359,8 @@ class SCrecipeDialog(QDialog):
             for d in self.pardlist:
                 ind=d['slider'].sliderPosition()
                 f=d['fcns'][ind]
+                if f is None:
+                    continue
                 saven=d['savename']
                 namsegkfilk=[(nam, (segk, str(cb.currentText()))) for nam, segk, cb in zip(d['parnames'][ind], d['segdkeys'][ind], d['parcombos'])]
                 postfilk=str(d['postcombo'].currentText())
@@ -324,20 +368,34 @@ class SCrecipeDialog(QDialog):
                 arr=f(**dict(partups+partup_seg+namsegkfilk))
                 arr=performgenericfilter(arr, self.filterd[postfilk])
                 self.hpsegdlist[si][saven]=arr
-
-
-        if self.plotdialog is None:
-            self.plotdialog=analysisviewerDialog(None, self.hpsegdlist, hpname=self.h5hpname)
-            self.plotdialog.drawall()
+            if self.calctype=='FitPS':
+                segd=self.hpsegdlist[si]
+                parttime=segd['cyclepartition']
+                fitf=FitFcnLibrary[f.func_name]
+                pns=d['parnames'][ind] # this assumes that the fitting was the last thing done in the above pardlist loop
+                ks=d['segdkeys'][ind]
+                xdata+=[ct[pt>=0] for ct, pt in zip(segd['cycletime'], parttime)]
+                fitans+=[fitf(**dict([('p', p)]+[(pn, segd[k][i][pt>=0]) for pn, k in zip(pns, ks) if pn in fitf.func_code.co_varnames[:fitf.func_code.co_argcount]])) for i, (p, pt) in enumerate(zip(arr, parttime))]
+                fitdata+=[y[pt>=0] for y, pt in zip(segd['samplepowerperrate'], parttime)]
+        if self.calctype=='RTPSD' or self.calctype=='QUC':
+            if self.plotdialog is None:
+                self.plotdialog=analysisviewerDialog(None, self.hpsegdlist, hpname=self.h5hpname)
+                self.plotdialog.drawall()
+                self.plotdialog.show()
+                self.plotdialog.activateWindow()
+            else:
+                self.plotdialog.hpsegdlist=self.hpsegdlist
+                self.plotdialog.initwidgets()
+                self.plotdialog.drawall()
+                self.plotdialog.show()
+                self.plotdialog.activateWindow()
+        elif self.calctype=='FitPS':
+            if not self.plotdialog is None:
+                self.plotdialog.close()
+            cols=['k', 'y', 'b', 'm', 'g', 'c', 'r']*10
+            self.plotdialog=simpleplotDialog(None, fitans+fitdata, xdata=xdata+xdata, style=[c+'--' for c in cols[:len(xdata)]]+[c+'.' for c in cols[:len(xdata)]])
             self.plotdialog.show()
             self.plotdialog.activateWindow()
-        else:
-            self.plotdialog.hpsegdlist=self.hpsegdlist
-            self.plotdialog.initwidgets()
-            self.plotdialog.drawall()
-            self.plotdialog.show()
-            self.plotdialog.activateWindow()
-
     def slidermoved0(self):
         self.updateparwidgets(0)
     def slidermoved1(self):
@@ -351,8 +409,10 @@ class SCrecipeDialog(QDialog):
 
     def updateparwidgets(self, widgetind=None):
         if widgetind is None:
-            widgetind=range(5)
+            widgetind=range(len(self.pardlist))
         else:
+            if widgetind>=len(self.pardlist):
+                return
             widgetind=[widgetind]
         for wind in widgetind:
             d=self.pardlist[wind]
@@ -411,7 +471,7 @@ class SCrecipeDialog(QDialog):
             if d['name'] in self.filterd.keys() and not (editfilter and d['name']==nam):
                 edit=True
                 QMessageBox.warning(self,"ERROR",  "'name' already exists")
-            if d['SGderiv']<0 or d['SGderiv']>1:
+            if 'SGderiv' in d.keys() and (d['SGderiv']<0 or d['SGderiv']>1):
                 edit=True
                 QMessageBox.warning(self,"ERROR",  "only 0th or 1st deriv supported")
         if editfilter:
@@ -460,6 +520,15 @@ class SCrecipeDialog(QDialog):
     def integfilterfill(self, cb):
         self.filterfill(cb, reqkeys=['integwindow_s', 'fitpars'])
     
+    def fitevalfilterfill(self, cb):
+        self.filterfill(cb, reqkeys=['interp_kind', 'extrap_order'])
+    
+    def griddatafilterfill(self, cb):
+        self.filterfill(cb, reqkeys=['gridinterval'])
+    
+    def peakfitfilterfilterfill(self, cb):
+        self.filterfill(cb, reqkeys=['useredit','pkfcn', 'critpeakheight', 'critsep', 'firstdernpts', 'firstderorder', 'secdernpts', 'secderorder', 'critcurve', 'pospeaks', 'negpeaks'])
+
     def timepartfilterfill(self, cb):
         self.filterfill(cb, reqkeys=['numpartitions'])#fitpars is going to determine the number of parititons so it is necessary. if there will not be a contant term in the fit, then will will still need to be icnluded here and excluded in the fitfcn defintion
         #time partition functions: timepart_user, timepart_none, timepart_peakid (peakid not developed as of April2011)
@@ -468,9 +537,9 @@ class SCrecipeDialog(QDialog):
     
     def dfltfitfilterdicts(self, deriv=0):
         return [{'name':'timepart', 'numpartitions':1}, #contants and any other piecewise parameters have this many segments and these starting values\
-                    {'name':'fit_polyT4','fitpars':[1.e-8, 1.e-10, 1.e-12, 1.e-14]}, \
-                    {'name':'fit_T4','fitpars':[1.e-14]}, \
-                    {'name':'fit_dT','fitpars':[1.e-8]}, \
+                    {'name':'fit_T4','fitpars':[1.e-8, 1.e-10, 1.e-12, 1.e-14]}, \
+#                    {'name':'fit_T4','fitpars':[1.e-14]}, \
+#                    {'name':'fit_dT','fitpars':[1.e-8]}, \
                     {'name':'fit_c','fitpars':[1.e-6]}, \
                 ]
     
@@ -482,10 +551,23 @@ class SCrecipeDialog(QDialog):
                 'SGorder':1, \
                 'SGderiv':deriv, \
                 }
+    
+    def griddatafilterdflt(self):
+        return {'gridinterval':0.2}
+    
+    def peakfitfilterdflt(self):
+        return {'useredit':1,'pkfcn':'GaussHalfLorentz','critpeakheight':5.e-7, 'critsep':20., \
+        'firstdernpts':10, 'firstderorder':1, 'secdernpts':20, 'secderorder':1, \
+        'critcurve':None, 'pospeaks':1, 'negpeaks':1}
+    
+    
     def Nonefilterdict(self):
         return {'None':None, \
                 }
     
+    def fitevalfilterdflt(self):
+        return {'interp_kind':'linear', 'extrap_order':1, 'interppars':0}
+        
     def Qfilterdict(self, h5pathstr):
         attrs=geth5attrs(self.h5path, '/'.join((h5pathstr, 'sampleheatloss')))
         d=self.Nonefilterdict()
@@ -608,7 +690,7 @@ class SCrecipeDialog(QDialog):
         return d
 
 
-class SCanalysisDialog(QDialog):#***
+class SCanalysisDialog(QDialog):
     def __init__(self, parent, h5path, h5expname, h5hpdflt=None):
         super(SCanalysisDialog, self).__init__(parent)
         self.parent=parent
@@ -756,6 +838,8 @@ class SCanalysisDialog(QDialog):#***
         return [count for count, d in enumerate(hpsegdlist) if d['segmenttype'] in segindsortypes]
         
     def calcall(self):
+        print 'starting calcall'
+        self.plotdialog=None
         self.recname=str(self.recComboBox.currentText())
         hplist=self.readhpcb()
         h5file=h5py.File(self.h5path, mode='r')
@@ -764,30 +848,50 @@ class SCanalysisDialog(QDialog):#***
         h5file.close()
         partups=[('fild', filterd)]
         partups+=[(a, b) for a, b in zip(['h5path', 'h5expname'], [self.h5path, self.h5expname])]
-        for h5hpname in hplist:
+        for h5hpname in hplist[9:]:#***
             hpsegdlist=CreateHeatProgSegDictList(self.h5path, self.h5expname, h5hpname)
             seginds=self.getseginds(hpsegdlist)
             hppartup=[('h5hpname', h5hpname)]
+            xdata=[]#won't be used if not in fit recipe
+            fitans=[]
+            fitdata=[]
             for si in seginds:
                 partup_seg=[('segd',hpsegdlist[si])]
                 for f, saven, namsegkfilk, postfilk in f_saven_namsegkfilk_postfilk:
-                    print 'calculating %s for segment %d' %(saven, si)
+                    print 'calculating %s for segment %d in hp %s' %(saven, si, h5hpname)
                     f=eval(f)
                     arr=f(**dict(partups+hppartup+partup_seg+namsegkfilk))
                     arr=performgenericfilter(arr, filterd[postfilk])
                     hpsegdlist[si][saven]=arr
-            if self.plotdialog is None:
-                self.plotdialog=analysisviewerDialog(None, hpsegdlist, hpname=h5hpname)
-                self.plotdialog.drawall()
+                if 'FIT' in f.func_name:
+                    segd=hpsegdlist[si]
+                    parttime=segd['cyclepartition']
+                    fitf=FitFcnLibrary[f.func_name]
+                    xdata+=[ct[pt>=0] for ct, pt in zip(segd['cycletime'], parttime)]
+                    fitans+=[fitf(**dict([('p', p)]+[(nam, segd[segk][i][pt>=0]) for (nam, (segk, filter)) in namsegkfilk if nam in fitf.func_code.co_varnames[:fitf.func_code.co_argcount]])) for i, (p, pt) in enumerate(zip(arr, parttime))]
+                    fitdata+=[y[pt>=0] for y, pt in zip(segd['samplepowerperrate'], parttime)]
+            if 'FIT' in f.func_name:#this is not defitie, just up to function naming conventions
+                if not self.plotdialog is None:
+                    self.plotdialog.close()
+                cols=['k', 'y', 'b', 'm', 'g', 'c', 'r']*10
+                self.plotdialog=simpleplotDialog(None, fitans+fitdata, xdata=xdata+xdata, style=[c+'--' for c in cols[:len(xdata)]]+[c+'.' for c in cols[:len(xdata)]])
                 self.plotdialog.show()
                 self.plotdialog.activateWindow()
+            elif 'CTpks_secder' in f.func_name:
+                print 'post-calc plotting skipped'
             else:
-                self.plotdialog.hpsegdlist=hpsegdlist
-                self.plotdialog.hpname=h5hpname
-                self.plotdialog.initwidgets()
-                self.plotdialog.drawall()
-                self.plotdialog.show()
-                self.plotdialog.activateWindow()
+                if self.plotdialog is None:
+                    self.plotdialog=analysisviewerDialog(None, hpsegdlist, hpname=h5hpname)
+                    self.plotdialog.drawall()
+                    self.plotdialog.show()
+                    self.plotdialog.activateWindow()
+                else:
+                    self.plotdialog.hpsegdlist=hpsegdlist
+                    self.plotdialog.hpname=h5hpname
+                    self.plotdialog.initwidgets()
+                    self.plotdialog.drawall()
+                    self.plotdialog.show()
+                    self.plotdialog.activateWindow()
             saveSCcalculations(self.h5path, self.h5expname, h5hpname, hpsegdlist, self.recname)
 #        if not newfilterd:
 #            print 'error importing filters from ', h5exp
@@ -909,15 +1013,15 @@ class analysisviewerDialog(QDialog):
         temp=self.hpsegdlist[0]['cycletime']
         xcyc=[numpy.array([], dtype=temp.dtype) for i in range(temp.shape[0])]
         ycyc=[numpy.array([], dtype=temp.dtype) for i in range(temp.shape[0])]
-        print xfcn==yfcn, d['xcb']==d['ycb']
+
         for si in seginds:
             segd=self.hpsegdlist[si]
             xarr=xfcn(segd)
             xcyc=[numpy.append(xc, x) for xc, x in zip(xcyc, xarr)]
             yarr=yfcn(segd)
             ycyc=[numpy.append(yc, y) for yc, y in zip(ycyc, yarr)]
-            print xarr==yarr
-        print [a==b for a, b in zip(xcyc, ycyc)]
+#            print xarr==yarr
+#        print [a==b for a, b in zip(xcyc, ycyc)]
         for xc, yc in zip(xcyc, ycyc):
             d['plotw'].axes.plot(xc, yc, '.', ms=self.markersize)
         d['plotw'].axes.set_xlabel(str(d['xlable'].text()))
@@ -1173,12 +1277,13 @@ def filterattredit(parent, AttrDict, arr=None, title="Edit filter parameters. 'S
         count+=1
     return True
 
-def polyorder4_T(segd, fild, c, T, D, h5path=None, h5expname=None, h5hpname=None):#the I, dIdt, etc. should be tuples with a key for segd and then a key for fild
+def FIT_T0124(segd, fild, c, T, D, h5path=None, h5expname=None, h5hpname=None):
     fitpars=[]
-    for tup in enumerate([c, T, D]):
+    for tup in [c, T, D]:
         (segkey, filkey)=tup
         if 'fitpars' in fild[filkey].keys():
-            fitpars+=fild[filkey]['fitpars']
+            fitpars+=list(fild[filkey]['fitpars'])
+        if not '~'.join(tup) in segd.keys():
             segd['~'.join(tup)]=performgenericfilter(segd[segkey], fild[filkey])
     
     paritionedtime=segd['~'.join(c)]
@@ -1188,42 +1293,170 @@ def polyorder4_T(segd, fild, c, T, D, h5path=None, h5expname=None, h5hpname=None
     fp=[]
     ff=fitfcns()
     for pt, cycT, cycD in zip(paritionedtime, T_, D_):
-        ff.genfit(FitFcnLibrary[polyorder4_T.__name__], fitpars, (pt[pt>=0], cycT[pt>=0], cycD[pt>=0]))
+        ff.genfit(FitFcnLibrary[FIT_T0124.__name__], fitpars, (pt[pt>=0], cycT[pt>=0], cycD[pt>=0]))
+        if ff.error:
+            fitpars=[cycD[:50].mean()]*len(fitpars)
+            tempT=cycT[-50:].mean()
+            tempD=cycD[-50:].mean()/4.
+            for i in range(4):
+                fitpars[-4+i]=tempD/tempT**(i+1)
+            ff.genfit(FitFcnLibrary[FIT_T0124.__name__], fitpars, (pt[pt>=0], cycT[pt>=0], cycD[pt>=0]))
+        if ff.error:
+            fitpars=[cycD[-50:].mean()]*len(fitpars)
+            tempT=cycT[:50].mean()
+            tempD=cycD[:50].mean()/4.
+            for i in range(4):
+                fitpars[-4+i]=tempD/tempT**(i+1)
+            ff.genfit(FitFcnLibrary[FIT_T0124.__name__], fitpars, (pt[pt>=0], cycT[pt>=0], cycD[pt>=0]))
         fp+=[ff.finalparams]
     fp=numpy.float32(fp)
     return fp
     
-def pieceC_T4_intdT(segd, fild, c, T, dT, D, h5path=None, h5expname=None, h5hpname=None):#the I, dIdt, etc. should be tuples with a key for segd and then a key for fild
+def FIT_T4(segd, fild, c, T, D, h5path=None, h5expname=None, h5hpname=None):
     fitpars=[]
-    for tup in enumerate([c, T, dT, D]):
+    for tup in [c, T, D]:
         (segkey, filkey)=tup
         if 'fitpars' in fild[filkey].keys():
-            fitpars+=fild[filkey]['fitpars']
+            fitpars+=list(fild[filkey]['fitpars'])
+        if not '~'.join(tup) in segd.keys():
             segd['~'.join(tup)]=performgenericfilter(segd[segkey], fild[filkey])
     
     paritionedtime=segd['~'.join(c)]
     T_=segd['~'.join(T)]
-    dT_=segd['~'.join(dT)]
     D_=segd['~'.join(D)]
     
     fp=[]
     ff=fitfcns()
-    for pt, cycT, cycdT, cycD in zip(paritionedtime, T_, dT_, D_):
-        ff.genfit(FitFcnLibrary[pieceC_T4_intdT.__name__], fitpars, (pt[pt>=0], cycT[pt>=0], cycdT[pt>=0], cycD[pt>=0]))
+    for pt, cycT, cycD in zip(paritionedtime, T_, D_):
+        ff.genfit(FitFcnLibrary[FIT_T4.__name__], fitpars, (pt[pt>=0], cycT[pt>=0], cycD[pt>=0]))
+        if ff.error:
+            fitpars=[cycD[:50].mean()]*len(fitpars)
+            tempT=cycT[-50:].mean()
+            tempD=cycD[-50:].mean()/4.
+            for i in range(4):
+                fitpars[-4+i]=tempD/tempT**(i+1)
+            ff.genfit(FitFcnLibrary[FIT_T4.__name__], fitpars, (pt[pt>=0], cycT[pt>=0], cycD[pt>=0]))
+        if ff.error:
+            fitpars=[cycD[-50:].mean()]*len(fitpars)
+            tempT=cycT[:50].mean()
+            tempD=cycD[:50].mean()/4.
+            for i in range(4):
+                fitpars[-4+i]=tempD/tempT**(i+1)
+            ff.genfit(FitFcnLibrary[FIT_T4.__name__], fitpars, (pt[pt>=0], cycT[pt>=0], cycD[pt>=0]))
         fp+=[ff.finalparams]
     fp=numpy.float32(fp)
     return fp
+
+def FIT_t4(segd, fild, c, t, D, h5path=None, h5expname=None, h5hpname=None):
+    fitpars=[]
+    for tup in [c, t, D]:
+        (segkey, filkey)=tup
+        if 'fitpars' in fild[filkey].keys():
+            fitpars+=list(fild[filkey]['fitpars'])
+        if not '~'.join(tup) in segd.keys():
+            segd['~'.join(tup)]=performgenericfilter(segd[segkey], fild[filkey])
+    
+    paritionedtime=segd['~'.join(c)]
+    t_=segd['~'.join(t)]
+    D_=segd['~'.join(D)]
+    
+    fp=[]
+    ff=fitfcns()
+    for pt, cyct, cycD in zip(paritionedtime, t_, D_):
+        ff.genfit(FitFcnLibrary[FIT_t4.__name__], fitpars, (pt[pt>=0], cyct[pt>=0], cycD[pt>=0]))
+        if ff.error:
+            fitpars=[cycD[:50].mean()]*len(fitpars)
+            tempt=cyct[-50:].mean()
+            tempD=cycD[-50:].mean()/4.
+            for i in range(4):
+                fitpars[-4+i]=tempD/tempt**(i+1)
+            ff.genfit(FitFcnLibrary[FIT_t4.__name__], fitpars, (pt[pt>=0], cyct[pt>=0], cycD[pt>=0]))
+        if ff.error:
+            fitpars=[cycD[-50:].mean()]*len(fitpars)
+            tempt=cyct[:50].mean()
+            tempD=cycD[:50].mean()/4.
+            for i in range(4):
+                fitpars[-4+i]=tempD/tempt**(i+1)
+            ff.genfit(FitFcnLibrary[FIT_t4.__name__], fitpars, (pt[pt>=0], cyct[pt>=0], cycD[pt>=0]))
+        fp+=[ff.finalparams]
+    fp=numpy.float32(fp)
+    return fp
+
+def FIT_t5(segd, fild, c, t, D, h5path=None, h5expname=None, h5hpname=None):
+    fitpars=[]
+    for tup in [c, t, D]:
+        (segkey, filkey)=tup
+        if 'fitpars' in fild[filkey].keys():
+            fitpars+=list(fild[filkey]['fitpars'])
+        if not '~'.join(tup) in segd.keys():
+            segd['~'.join(tup)]=performgenericfilter(segd[segkey], fild[filkey])
+    
+    paritionedtime=segd['~'.join(c)]
+    t_=segd['~'.join(t)]
+    D_=segd['~'.join(D)]
+    
+    fp=[]
+    ff=fitfcns()
+    for pt, cyct, cycD in zip(paritionedtime, t_, D_):
+        ff.genfit(FitFcnLibrary[FIT_t5.__name__], fitpars, (pt[pt>=0], cyct[pt>=0], cycD[pt>=0]))
+        if ff.error:
+            fitpars=[cycD[:50].mean()]*len(fitpars)
+            tempt=cyct[-50:].mean()
+            tempD=cycD[-50:].mean()/4.
+            for i in range(4):
+                fitpars[-4+i]=tempD/tempt**(i+1)
+            ff.genfit(FitFcnLibrary[FIT_t5.__name__], fitpars, (pt[pt>=0], cyct[pt>=0], cycD[pt>=0]))
+        if ff.error:
+            fitpars=[cycD[-50:].mean()]*len(fitpars)
+            tempt=cyct[:50].mean()
+            tempD=cycD[:50].mean()/4.
+            for i in range(4):
+                fitpars[-4+i]=tempD/tempt**(i+1)
+            ff.genfit(FitFcnLibrary[FIT_t5.__name__], fitpars, (pt[pt>=0], cyct[pt>=0], cycD[pt>=0]))
+        fp+=[ff.finalparams]
+    fp=numpy.float32(fp)
+    return fp
+
+
+#def timeintegrate(arr, integwindow_s=1.)
+
+#def FIT??pieceC_T4_intdT(segd, fild, c, T, dT, D, h5path=None, h5expname=None, h5hpname=None):#the I, dIdt, etc. should be tuples with a key for segd and then a key for fild
+#    fitpars=[]
+#    for tup in [c, T, dT, D]:
+#        (segkey, filkey)=tup
+#        if 'fitpars' in fild[filkey].keys():
+#            fitpars+=list(fild[filkey]['fitpars'])
+#        if not '~'.join(tup) in segd.keys():
+#            segd['~'.join(tup)]=performgenericfilter(segd[segkey], fild[filkey])
+#    
+#    paritionedtime=segd['~'.join(c)]
+#    T_=segd['~'.join(T)]
+#    dT_=segd['~'.join(dT)]
+#    D_=segd['~'.join(D)]
+#    
+#    fp=[]
+#    ff=fitfcns()
+#    for pt, cycT, cycdT, cycD in zip(paritionedtime, T_, dT_, D_):
+#        ff.genfit(FitFcnLibrary[pieceC_T4_intdT.__name__], fitpars, (pt[pt>=0], cycT[pt>=0], cycdT[pt>=0], cycD[pt>=0]))
+#        fp+=[ff.finalparams]
+#    fp=numpy.float32(fp)
+#    return fp
 
 def pt_none(segd, fild, t, h5path=None, h5expname=None, h5hpname=None):
     (segkey, filkey)=t
     return numpy.zeros(segd[segkey].shape, dtype='float32')
     
+def useexisting(segd, fild, x, h5path=None, h5expname=None, h5hpname=None):
+    (segkey, filkey)=x
+    return segd[segkey]
+
 def pt_user(segd, fild, t, D, h5path=None, h5expname=None, h5hpname=None):#the I, dIdt, etc. should be tuples with a key for segd and then a key for fild
     fitpars=[]
-    for tup in enumerate([t, D]):
+    for tup in [t, D]:
         (segkey, filkey)=tup
         if 'fitpars' in fild[filkey].keys():
             fitpars+=fild[filkey]['fitpars']
+        if not '~'.join(tup) in segd.keys():
             segd['~'.join(tup)]=performgenericfilter(segd[segkey], fild[filkey])
     
     D_=segd['~'.join(D)]
@@ -1235,10 +1468,11 @@ def pt_user(segd, fild, t, D, h5path=None, h5expname=None, h5hpname=None):#the I
     
 def pt_calc(segd, fild, t, D, h5path=None, h5expname=None, h5hpname=None):#TODO: need tgo wirte auto time partiiooning. this is not implemented yet, so just using copy user-defined fcn
     fitpars=[]
-    for tup in enumerate([t, D]):
+    for tup in [t, D]:
         (segkey, filkey)=tup
         if 'fitpars' in fild[filkey].keys():
             fitpars+=fild[filkey]['fitpars']
+        if not '~'.join(tup) in segd.keys():
             segd['~'.join(tup)]=performgenericfilter(segd[segkey], fild[filkey])
     
     D_=segd['~'.join(D)]
@@ -1248,8 +1482,111 @@ def pt_calc(segd, fild, t, D, h5path=None, h5expname=None, h5hpname=None):#TODO:
     idialog.exec_()
     return idialog.timepart
     
-#TODO: using the savename FITPARS_sampleheatloss, when the saveSCcalculations is called, need to save the fitpars even though they don't adhere to the shape criteria. also want to save attributes with the parameters, like timepart and which function was used. probably take the above fitfcn  and rename them as functions that can be called with segdict. maybe still define a fifcn but have it be a wrapper in which the parameters are wrappedinto a dictionary and passed into the functio that accepts segdict
+def C_Dfit(segd, fild, D, pt, h5path=None, h5expname=None, h5hpname=None):
+    for tup in [D]:
+        (segkey, filkey)=tup
+        if not '~'.join(tup) in segd.keys():
+            segd['~'.join(tup)]=performgenericfilter(segd[segkey], fild[filkey])
+        #if True in [v>0 for k, v in fild[filkey].iteritems() if 'deriv' in k]: #this handle deriv filters other than SG but if the deriv is not wrt dt something needs to change
+        #    segd['~'.join(tup)]/=dt
+    D_=segd['~'.join(D)]
     
+    f, fitd=getfitdict_nameseg(h5path, h5expname, h5hpname, 'samplepowerperrate', segd['segindex'])
+    f.close()
+    (segkey, filkey)=pt
+    Dfit=numpy.float32(evaluatefitfcn(fitd, segd, interp_kind=fild[filkey]['interp_kind'], extrap_order=fild[filkey]['extrap_order'], interppars=fild[filkey]['interppars']))
+    return D_-Dfit
+    
+    
+def CTpks_secder(segd, fild, C, T, h5path=None, h5expname=None, h5hpname=None):
+    for tup in [C, T]:
+        (segkey, filkey)=tup
+        if not '~'.join(tup) in segd.keys():
+            segd['~'.join(tup)]=performgenericfilter(segd[segkey], fild[filkey])
+        #if True in [v>0 for k, v in fild[filkey].iteritems() if 'deriv' in k]: #this handle deriv filters other than SG but if the deriv is not wrt dt something needs to change
+        #    segd['~'.join(tup)]/=dt
+    C_=segd['~'.join(C)]
+    T_=segd['~'.join(T)]
+    
+    (segkey, filkey)=T
+    Tfild=fild[filkey]
+    dx=Tfild['gridinterval']
+    (segkey, filkey)=C
+    Cfild=fild[filkey]
+    
+    psSGdict=dict([(k, v) for k, v in Cfild.iteritems() if k in peaksearch1dSG.func_code.co_varnames[:peaksearch1dSG.func_code.co_argcount]])
+    psSGdict['dx']=dx
+    psSGdict['critsepind']=Cfild['critsep']/dx
+    
+    pkslist_cycles=[]
+    siglist_cycles=[]
+    residlist=[]
+    for X, Y in zip(T_, C_):
+        Xgrid=numpy.linspace(X.min(), X.max(), (X.max()-X.min())/dx+1)
+        Ygrid=numpy.empty(Xgrid.shape, dtype='float32')
+        gridind=[numpy.argmin((x-Xgrid)**2) for x in X]
+        indsgot=numpy.sort(numpy.uint32(list(set(gridind))))
+        indsinterp=numpy.sort(numpy.uint32(list(set(range(len(Xgrid)))-set(gridind))))
+        gridind=numpy.uint32(gridind)
+        for i in indsgot:
+            Ygrid[i]=Y[gridind==i].mean()
+        Ygrid[indsinterp]=numpy.float32(scipy.interpolate.interp1d(indsgot, Ygrid[indsgot])(indsinterp))
+        psSGdict['x']=Ygrid
+        pkind=peaksearch1dSG(**psSGdict)
+
+        pkht=Ygrid[numpy.uint32(numpy.round(pkind))]
+        pkposn=Xgrid[numpy.uint32(numpy.round(pkind))]
+        iarr=numpy.uint32(range(len(Xgrid)))
+        hwposns1=[(numpy.any((s*Ygrid<(s*h/2.))&(iarr>i)) and (numpy.where((s*Ygrid<(s*h/2.))&(iarr>i))[0][0]-i,) or (iarr[-1]/100.,))[0] for i, h, s in zip(pkind, pkht, numpy.sign(pkht))]
+        hwposns0=[(numpy.any((s*Ygrid<(s*h/2.))&(iarr<i)) and (i-numpy.where((s*Ygrid<(s*h/2.))&(iarr<i))[0][-1],) or (iarr[-1]/100.,))[0] for i, h, s in zip(pkind, pkht, numpy.sign(pkht))]
+        pkhw=dx*(numpy.float32(hwposns1)+numpy.float32(hwposns0))/2.
+
+
+        pks=numpy.float32([pkposn, pkhw, pkht]).T#, numpy.ones(pkht.shape, dtype='float32')*.5]).T
+        print '&&', pks
+        #***
+        fitpks=pks
+        sigs=numpy.zeros(fitpks.shape, dtype='float32')
+        resids=numpy.zeros(fitpks.shape[0], dtype='float32')
+        #***
+#        fitpks, sigs, resids=fitpeakset(X, Y, pks, PeakFcnLibrary[Cfild['pkfcn']])
+#        print '**', fitpks
+        fitpks=numpy.float32(fitpks)
+        sigs=numpy.float32(sigs)
+        resids=numpy.float32(resids)
+        if Cfild['useredit']:
+            idialog=peakfiteditDialog(None, X, Y, fitpks, PeakFcnLibrary[Cfild['pkfcn']])
+            idialog.exec_()
+            if idialog.sigs is None:#if fitting was not done then only update if user changed peaks. if fitting done, update everything
+                if not (len(fitpks)==(idialog.fitpks) and numpy.all(fitpks==idialog.fitpks)):
+                    fitpks=idialog.fitpks
+                    sigs=numpy.zeros(fitpks.shape, dtype='float32')
+                    resids=numpy.zeros(fitpks.shape[0], dtype='float32')
+            else:
+                fitpks=idialog.fitpks
+                sigs=idialog.sigs
+                resids=idialog.resids
+        
+        pkslist_cycles+=[fitpks]
+        siglist_cycles+=[sigs]
+        residlist+=[resids]
+    
+    PROFILEANALYSIS={}
+    PROFILEANALYSIS['Xgrid']=Xgrid
+    PROFILEANALYSIS['Ygrid']=Ygrid
+    
+    n=numpy.max([len(l) for l in pkslist_cycles])
+    if n:
+        parr=numpy.ones((len(pkslist_cycles), n, 3), dtype='float32')*numpy.nan
+        sarr=numpy.ones((len(pkslist_cycles), n, 3), dtype='float32')*numpy.nan
+        for pl, sl, p, s in zip(pkslist_cycles, siglist_cycles, parr, sarr):
+            p[:len(pl), :]=pl[:, :]
+            s[:len(sl), :]=sl[:, :]
+        PROFILEANALYSIS['peaks']=parr
+        PROFILEANALYSIS['sigmas_peaks']=sarr
+        PROFILEANALYSIS['residuals_peaks']=numpy.float32(residlist)
+
+    return PROFILEANALYSIS
 #p='C:/Users/JohnnyG/Documents/PythonCode/Vlassak/NanoCalorimetry/Nanocopeia1_PnSC.h5'
 ##p='C:/Users/JohnnyG/Documents/HarvardWork/pharma/PnSC/Nanocopeia1_PnSC.h5'
 #e='NoSampleRamps'
