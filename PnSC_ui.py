@@ -1308,7 +1308,7 @@ class timepartDialog(QDialog):
         self.piecebndrylist=[[] for i in range(self.numpieces-1)]
         self.removeindslist=[[] for i in range(self.cycletime.shape[0])]
         
-        self.plotw=plotwidget(self)
+        self.plotw=plotwidget(self, width=16, height=16)
         QObject.connect(self.plotw, SIGNAL("genericclickonplot"), self.clickprocess)
 
         self.cycleComboBox=QComboBox()

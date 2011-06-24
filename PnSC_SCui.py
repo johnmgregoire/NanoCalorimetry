@@ -848,7 +848,7 @@ class SCanalysisDialog(QDialog):
         h5file.close()
         partups=[('fild', filterd)]
         partups+=[(a, b) for a, b in zip(['h5path', 'h5expname'], [self.h5path, self.h5expname])]
-        for h5hpname in hplist[9:]:#***
+        for h5hpname in hplist[0:]:#***
             hpsegdlist=CreateHeatProgSegDictList(self.h5path, self.h5expname, h5hpname)
             seginds=self.getseginds(hpsegdlist)
             hppartup=[('h5hpname', h5hpname)]

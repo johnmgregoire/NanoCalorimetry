@@ -644,8 +644,8 @@ def start(previousmm=None):
     PARENT=form
     mainapp.exec_()
     return form
-
-mm=start()
+mm=None
+#mm=start()
 print 'done'
 
 #fitd=getfitdictlist_hp(mm.h5path, 'heat1a','2010Nov27_Cell2_61mA_50ms_500ms_cool_1C')[0]

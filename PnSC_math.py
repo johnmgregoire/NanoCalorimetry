@@ -75,7 +75,7 @@ class fitfcns: #datatuples are x1,x2,...,y
                 except:
                     self.error=1
             else:
-                fitout = scipy.optimize.leastsq(self.resfcn,self.initparams, args=datatuple, maxfev=self.maxfev, full_output=1, warning=False)
+                fitout = scipy.optimize.leastsq(self.resfcn,self.initparams, args=datatuple, maxfev=self.maxfev, full_output=1)#, warning=False)
                 self.performfit=False
                 self.finalparams=fitout[0]
                 if not fitout[4] in [1, 2]:

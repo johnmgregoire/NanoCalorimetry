@@ -19,7 +19,6 @@ def myexpformat(x, pos):
     return lab
 ExpTickLabels=FuncFormatter(myexpformat)
 
-rootfolder='E:/CHESS2010PnSC'
 
 nskip=100
 #name, (cycles,daqHz)
@@ -45,11 +44,11 @@ exp_rec=[\
 ('heat8',[(2, 'sampletemperature', 'samplepowerperrate', (nskip, -1*nskip)), (4, 'sampletemperature', 'samplepowerperrate', (nskip, -25*nskip))]),\
 ]
 
-p='E:/CHESS2010PnSC/AuSiCu_pnsc_all.h5'
+p='C:/Users/JohnnyG/Documents/PythonCode/Vlassak/NanoCalorimetry/AuSiCu_pnsc_all.h5'
 #p=mm.h5path
 #f=h5py.File(p, mode='r+')
 #f=h5py.File(p, mode='r')
-savef='E:/CHESS2010PnSC/SCcellplots'
+savef='C:/Users/JohnnyG/Documents/HarvardWork/MG/PnSCplots/batchplotbycell_May17'
 plotinfo0=[[] for i in range(25)]
 plotinfo1=[[] for i in range(25)]
 plotinfo=[plotinfo0, plotinfo1]
@@ -111,10 +110,10 @@ for cellcount, (pi0, pi1) in enumerate(zip(plotinfo0, plotinfo1)):
         pylab.ylabel('P / dT/dt')
         pylab.gca().yaxis.set_major_formatter(ExpTickLabels)
     pylab.subplots_adjust(left=.1, right=.97, top=.93, bottom=.08, wspace=.25, hspace=.25)
-    pylab.show()
-    idialog=messageDialog(title='continue')
-    if not idialog.exec_():
-        break
+#    pylab.show()
+#    idialog=messageDialog(title='continue')
+#    if not idialog.exec_():
+#        break
 #    break
-#    pylab.savefig(os.path.join(savef,'SCcellplot_cell%02d' %(cellcount+1)+'.png'))
+    pylab.savefig(os.path.join(savef,'SCcellplot_cell%02d' %(cellcount+1)+'.png'))
     pylab.clf()
