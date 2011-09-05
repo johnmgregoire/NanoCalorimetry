@@ -135,6 +135,7 @@ for selectcell in celllist:
         else:
             metadict['prevcoolrate_180C']=heatrate_T(prevhpsdl[prevmetadict['coolseg']], 180.)
             metadict['prevcoolrate_250C']=heatrate_T(prevhpsdl[prevmetadict['coolseg']], 250.)
+            metadict['prevcoolrate_320C']=heatrate_T(prevhpsdl[prevmetadict['coolseg']], 320.)
             metadict['prevcoolrate_400C']=heatrate_T(prevhpsdl[prevmetadict['coolseg']], 400.)
             metadict['prevname']=prevmetadict['name']
         print metadict['name'], ', previous scan ', metadict['prevname']

@@ -375,8 +375,77 @@ def timepartition(cycletime, timepartitionfcn='timepart_none', piecelist=[1], yv
         print 'ERROR - ABOUT TO ABORT BECAUSE timepartitionfcn IS NOT VALID'
         return
 
+def sinarr(nptspercycle, npts, ph=0.):
+    if isinstance(npts, numpy.ndarray):
+        npts=len(npts)
+    return numpy.sin(numpy.arange(npts)*2.*numpy.pi/nptspercycle+ph)
+    
+def lia_ampphase(x, ptspercyc, ncyclewin=1., returnphase=True, pad=True, phaseshift=0.):
+    npts=numpy.round(ptspercyc*ncyclewin)
+    s=x*sinarr(ptspercyc, x, ph=phaseshift)
+    c=x*sinarr(ptspercyc, x, ph=numpy.pi/2.+phaseshift)
+    amp=(numpy.array([(numpy.fft.fft(s[i:i+npts])[0].real)**2+(numpy.fft.fft(c[i:i+npts])[0].real)**2 for i in numpy.arange(len(x)-npts)])**.5)*2./npts
+    if returnphase:
+        phase=numpy.array([numpy.arctan(numpy.fft.fft(s[i:i+npts])[0].real/numpy.fft.fft(c[i:i+npts])[0].real) for i in numpy.arange(len(x)-npts)])
+    if pad:
+        amp=numpy.concatenate([amp[:npts//2], amp, amp[-1*(len(x)-len(amp)-npts//2):]])
+        if returnphase:
+            phase=numpy.concatenate([phase[:npts//2], phase, phase[-1*(len(x)-len(phase)-npts//2):]])
+    if returnphase:
+        return amp, phase
+    return amp
 
+def lia_ampphase2(x, ptspercyc, ncyclewin=1., returnphase=True, pad=True, phaseshift=0.):
+    npts=numpy.round(ptspercyc*ncyclewin)
+    s=x*sinarr(ptspercyc, x, ph=phaseshift)
+    c=x*sinarr(ptspercyc, x, ph=numpy.pi/2.+phaseshift)
+    amp=(numpy.array([(s.sum())**2+(c.sum())**2 for i in numpy.arange(len(x)-npts)])**.5)*2./npts
+    if returnphase:
+        phase=numpy.array([numpy.arctan(s.sum()/c.sum()) for i in numpy.arange(len(x)-npts)])
+    if pad:
+        amp=numpy.concatenate([amp[:npts//2], amp, amp[-1*(len(x)-len(amp)-npts//2):]])
+        if returnphase:
+            phase=numpy.concatenate([phase[:npts//2], phase, phase[-1*(len(x)-len(phase)-npts//2):]])
+    if returnphase:
+        return amp, phase
+    return amp
+    
+def liaharmonic_relphase(x, phaserefdata, ptspercyc, ncyclewin_1w=2., ncyclewin_nw=6., harmonic=3., phaseshift=0., pad=True):
+    #calculated phase is wrt a cosine reference
+    # x is harmonic data, harmonic = 1 is ok, phaserefdata should be same length but if it is shorter it will be padded to make length x
+    #ncyclewin_nw is number of harmonic cycles (as opposed to  1w cycles)
+    npts=numpy.round(ptspercyc*ncyclewin_1w)
+    s=phaserefdata*sinarr(ptspercyc, phaserefdata, ph=0)
+    c=phaserefdata*sinarr(ptspercyc, phaserefdata, ph=numpy.pi/2.)
+    ph1w=numpy.array([numpy.arctan(numpy.fft.fft(s[i:i+npts])[0]/numpy.fft.fft(c[i:i+npts])[0]) for i in numpy.arange(len(phaserefdata)-npts)])
+    phnw=numpy.concatenate([ph1w[:npts//2.], ph1w, ph1w[-1*(len(x)-len(ph1w)-npts//2.):]])
+    phnw-=phaseshift
+#    pylab.figure()
+#    pylab.plot(ph1w)
+#    pylab.plot(phnw)
+#    pylab.figure()
+    hptspc=ptspercyc/harmonic
+    nptsnw=numpy.round(hptspc*ncyclewin_nw)
+    s=sinarr(hptspc, x, ph=0)
+    c=sinarr(hptspc, x, ph=numpy.pi/2.)
+#    pylab.plot(numpy.array([(numpy.fft.fft(x[i:i+nptsnw]*(c[i:i+nptsnw]*numpy.cos(p)+s[i:i+nptsnw]*numpy.sin(p)))[0])**2 for i, p in zip(numpy.arange(len(x)-nptsnw), phnw[nptsnw//2:])])*4./nptsnw**2)
+#    pylab.plot(sfft2cfft2(x, hptspc, ncyclewin_nw), 'k--')
+#    pylab.show()
+    amp=(numpy.array([(numpy.fft.fft(x[i:i+nptsnw]*(c[i:i+nptsnw]*numpy.cos(p)+s[i:i+nptsnw]*numpy.sin(p)))[0].real)**2 for i, p in zip(numpy.arange(len(x)-nptsnw), phnw[nptsnw//2:])])**0.5)*2./nptsnw
+    if pad:
+        amp=numpy.concatenate([amp[:nptsnw//2], amp, amp[-1*(len(x)-len(amp)-nptsnw//2):]])
+    return amp
 
+def windowfft_ampphase(x, npts_win, pad=True, ptspercyc=None):
+    symmetryfactor=2.*numpy.ones(npts_win//2+1, dtype='float64')
+    symmetryfactor[0]=1.
+    comp=numpy.array([numpy.fft.fft(x[i:i+npts_win])[:npts_win//2+1]*symmetryfactor for i in numpy.arange(len(x)-npts_win)])
+    amp, phase=numpy.array([[numpy.abs(c), numpy.angle(c)] for c in comp]).swapaxes(0, 1)
+    if pad:
+        amp=numpy.concatenate([amp[:npts_win//2], amp, amp[-1*(len(x)-len(amp)-npts_win//2):]])
+        phase=numpy.concatenate([phase[:npts_win//2], phase, phase[-1*(len(x)-len(phase)-npts_win//2):]])
+    return amp/npts_win, phase #frequencies are in units of daqHz and are  numpy.array(range(npts_win//2+1))/npts_win.
+    
 def performgenericfilter(arr, filterdict):#filterdict can contains unused key:val but it must contain all those necessary for a given filter step to be performed
     arr=copy.copy(arr)
     fcn_parname_fkey_eachcycle=[\
@@ -447,27 +516,39 @@ def evaluatefitfcn(fitd, segd, interp_kind=1, extrap_order=1, interppars=False):
         inds2=numpy.where((t<0.)&(iarr<inds[0][0]))
         if len(inds2[0])>0:#use spline on the ends and only use as many data points as you need to extrapolate over. interpolations happen with respect to index so that it is always monotonic
             if interppars:
-                fcn=scipy.interpolate.UnivariateSpline(iarr[inds[0][:len(inds2[0])]], numpy.float32([p[int(round(j))] for j in t[inds[0][:len(inds2[0])]]]), k=extrap_order)
-                intpar=numpy.float32(fcn(iarr[inds2]))
+                #fcn=scipy.interpolate.UnivariateSpline(iarr[inds[0][:len(inds2[0])]], numpy.float32([p[int(round(j))] for j in t[inds[0][:len(inds2[0])]]]), k=extrap_order)
+                #intpar=numpy.float32(fcn(iarr[inds2]))
+                #Univeritae spline has a problem on 27Aug2011 that was not seen previously, so replace this extrapolation with filling in the end value of the parameter, 4 places below ($$$)
+                #$$$
+                intpar=numpy.zeros(len(inds2[0]), dtype='float32')+p[int(round(t[inds[0][0]]))]
+                
                 #                                      take fitpars, replace 0th with intpar          use the args in fitfcn except make a cyclepartition that will access the 0th fitpar                              iteration to get the parameters needed by the fitfcn from the segd                                                             due to the intpar value change at every index, new set of fitpar and thus args for fitfcn at every array index
                 argtuplist_ind2=[[('p', tuple([ip]+list(p[1:])))]+[(pn, numpy.array(k=='cyclepartition' and (0,) or (segd[k][i][j],))) for pn, k in zip(pns, ks) if pn in f.func_code.co_varnames[:f.func_code.co_argcount]] for j, ip in zip(inds2[0], intpar)]
                 a[inds2]=numpy.float32([f(**dict(tuplist)) for tuplist in argtuplist_ind2])
             else:
-                fcn=scipy.interpolate.UnivariateSpline(iarr[inds[0][:len(inds2[0])]], a[inds[0][:len(inds2[0])]], k=extrap_order)
-                a[inds2]=numpy.float32(fcn(iarr[inds2]))
+                #fcn=scipy.interpolate.UnivariateSpline(iarr[inds[0][:len(inds2[0])]], a[inds[0][:len(inds2[0])]], k=extrap_order)
+                #intpar=numpy.float32(fcn(iarr[inds2]))
+                #$$$
+                intpar=numpy.zeros(len(inds2[0]), dtype='float32')+p[int(round(t[inds[0][0]]))]
+                a[inds2]=intpar
         inds2=numpy.where((t<0.)&(iarr>inds[0][-1]))
         if len(inds2[0])>0:
             starti=len(inds[0])-len(inds2[0])#use only that last len inds2 indeces of the inds 
             starti=max(0, starti)
             if interppars:
-                fcn=scipy.interpolate.UnivariateSpline(iarr[inds[0][starti:]], numpy.float32([p[int(round(j))] for j in t[inds[0][starti:]]]), k=extrap_order)
-                intpar=numpy.float32(fcn(iarr[inds2]))
+                #fcn=scipy.interpolate.UnivariateSpline(iarr[inds[0][starti:]], numpy.float32([p[int(round(j))] for j in t[inds[0][starti:]]]), k=extrap_order)
+                #intpar=numpy.float32(fcn(iarr[inds2]))
+                #$$$
+                intpar=numpy.zeros(len(inds2[0]), dtype='float32')+p[int(round(t[inds[0][-1]]))]
                 #                                      take fitpars, replace 0th with intpar          use the args in fitfcn except make a cyclepartition that will access the 0th fitpar                              iteration to get the parameters needed by the fitfcn from the segd                                                             due to the intpar value change at every index, new set of fitpar and thus args for fitfcn at every array index
                 argtuplist_ind2=[[('p', tuple([ip]+list(p[1:])))]+[(pn, numpy.array(k=='cyclepartition' and (0,) or (segd[k][i][j],))) for pn, k in zip(pns, ks) if pn in f.func_code.co_varnames[:f.func_code.co_argcount]] for j, ip in zip(inds2[0], intpar)]
                 a[inds2]=numpy.float32([f(**dict(tuplist)) for tuplist in argtuplist_ind2])
             else:
-                fcn=scipy.interpolate.UnivariateSpline(iarr[inds[0][starti:]], a[inds[0][starti:]], k=extrap_order)
-                a[inds2]=numpy.float32(fcn(iarr[inds2]))
+                #fcn=scipy.interpolate.UnivariateSpline(iarr[inds[0][starti:]], a[inds[0][starti:]], k=extrap_order)
+                #intpar=numpy.float32(fcn(iarr[inds2]))
+                #$$$
+                intpar=numpy.zeros(len(inds2[0]), dtype='float32')+p[int(round(t[inds[0][-1]]))]
+                a[inds2]=intpar
     return ans
 #def piecewise(p, c):
 #    ans=numpy.float64([p[int(round(i))] for i in c])
@@ -494,3 +575,40 @@ FitFcnLibrary=dict([\
     ('FIT_T0124', lambda p, c, T: numpy.float64([p[int(round(i))] for i in c])+numpy.array([v*(T**(i)) for i, v in zip([1, 2, 4], p[-3:])]).sum(axis=0)),\
     #('pieceC_T4_intdT', lambda p, c, T, dT: numpy.float64([p[int(round(i))] for i in c])+p[-2]*T+p[-1]*dT),\
     ])
+
+
+def calcRofromheatprogram(I1, V1, I2, V2, RoToAl, o_R2poly=1):
+    d={}
+    d['P1']=I1*V1
+    d['P2']=I2*V2
+    ff=fitfcns()
+    inds=numpy.where(numpy.array([I1])==0.)#array() is to make it 2-d for the replace fcn
+    if len(inds[0])>0:
+        I1=replacevalswithneighsin2nddim(numpy.array([I1]), inds)[0]
+        V1=replacevalswithneighsin2nddim(numpy.array([V1]), inds)[0]
+    inds=numpy.where(I2==0.)
+    if len(inds[0])>0:
+        I2=replacevalswithneighsin2nddim(numpy.array([I2]), inds)[0]
+        V2=replacevalswithneighsin2nddim(numpy.array([V2]), inds)[0]
+    #R1=V1/I1
+    R2=V2/I2
+    coefs=[R2[0]]+[(R2[-1]-R2[0])/len(R2)**i for i in range(1, o_R2poly+1)]
+    x=numpy.arange(len(R2), dtype='float64')
+    fcn=ff.polyfit((x, numpy.float64(R2)), coefs)
+    d['R2fit']=fcn(x)
+    R12=d['R2fit'][0]
+    #dR12=ff.finalparams[1]
+    d['delT2']=(d['R2fit'][-1]-d['R2fit'][0])/(RoToAl[0]*RoToAl[2])
+    
+    
+#    coefs=[T2[0]]+[(T2[-1]-T2[0])/len(T2)**i for i in range(1, o_T2poly+1)]
+#    x=numpy.arange(len(T2), dtype='float64')
+#    fcn=ff.polyfit((x, numpy.float64(T2)), coefs)
+#    d['T2fit']=fcn(x)
+#    delT2=d['T2fit'][-1]-d['T2fit'][0]
+    
+    d['c']=d['P2'].sum()/d['delT2']
+    d['delT1']=(d['c']*(d['P1'].sum()))
+    Ro=R12/(1.+RoToAl[2]*d['delT1'])
+    d['calc_Ro']=Ro
+    return Ro, d

@@ -84,6 +84,7 @@ f.close()
 
 x_cell=[]
 y_cell=[]
+z_cell=[]
 c_cell=[]
 cell_cell=[]
 x=[]
@@ -95,10 +96,11 @@ cells=[]
 for cell, cv, mdl, xdl in zip(range(1, 26), comp, metadictlists, xrddictlists):
     xtemp=[]
     ytemp=[]
+    ztemp=[]
     ctemp=[]
     celltemp=-1
     for md in mdl:
-        if not 'prevcoolrate_400C' in md.keys():
+        if not 'prevcoolrate_320C' in md.keys():
             continue
         pcal=md['prevname'][:5]
         cal=md['name'][:5]
@@ -106,26 +108,30 @@ for cell, cv, mdl, xdl in zip(range(1, 26), comp, metadictlists, xrddictlists):
             for xd in xdl:
                 if xd['name']==pcal:#use xrd that happened after the prev scan
                     
-                    x+=[numpy.abs(md['prevcoolrate_400C'])]
+                    x+=[numpy.abs(md['prevcoolrate_320C'])]
                     y+=[xd['amfrac']]
+                    z+=[xd['othfrac']]
                     c+=[cv]
                     cells+=[cell]
                     
                     
-                    xtemp+=[numpy.abs(md['prevcoolrate_400C'])]
+                    xtemp+=[numpy.abs(md['prevcoolrate_320C'])]
                     ytemp+=[xd['amfrac']]
+                    ztemp+=[xd['othfrac']]
                     ctemp+=[cv]
                     celltemp=cell
                     break
     if len(ctemp)>0:
         x_cell+=[xtemp]
         y_cell+=[ytemp]
+        z_cell+=[ztemp]
         c_cell+=[ctemp]
         cell_cell+=[celltemp]
 
 c=numpy.array(c)
 y=numpy.array(y)
 x=numpy.array(x)
+z=numpy.array(z)
 
 pylab.figure(figsize=(10, 6))
 ax=pylab.subplot(111)
@@ -136,25 +142,37 @@ rangelist=numpy.float32([[m, 1.-numpy.concatenate([minlist[:i], minlist[i+1:]]).
 colors=stp.color_comp_calc(comp[numpy.array(celllist)-1, :], rangelist=rangelist)
 
 pylab.clf()
-for cell, xv, yv in zip(cell_cell, x_cell, y_cell):
+for cell, xv, yv, zv in zip(cell_cell, x_cell, y_cell, z_cell):
     xv=numpy.array(xv)
     yv=numpy.array(yv)
+    zv=numpy.array(zv)
     sortarr=numpy.argsort(xv)
     #pylab.plot(xv[sortarr], yv[sortarr], '.', color=colors[celllist.index(cell)], markersize=16)
-    for xx, yy in zip(xv, yv):
-        pylab.text(xx, yy, `cell`, ha='center', va='center', color=colors[celllist.index(cell)], fontsize=12)
-        
-    pylab.plot(xv[sortarr], yv[sortarr], '-', color=colors[celllist.index(cell)], linewidth=1, alpha=.5)
+    #pylab.plot(xv[sortarr], yv[sortarr], '-', color=colors[celllist.index(cell)], linewidth=1, alpha=.5)
+    
+    a=yv[sortarr]
+    #a=yv[sortarr]/(yv[sortarr]+zv[sortarr])
+    
+    pylab.plot(xv[sortarr], a, '.', color=colors[celllist.index(cell)], markersize=16)
+    pylab.plot(xv[sortarr], a, '-', color=colors[celllist.index(cell)], linewidth=1, alpha=.5)
+    
+    if numpy.any(a[1:]<a[:-1]):
+        print cell, xv[sortarr], a
+#    for xx, yy in zip(xv, yv):
+#        pylab.text(xx, yy, `cell`, ha='center', va='center', color=colors[celllist.index(cell)], fontsize=12)
 
 pylab.gca().set_xscale('log')
 
 xmin=x.min()-.05*(x.max()-x.min())
 xmax=x.max()+.05*(x.max()-x.min())
-ymin=y.min()-.05*(y.max()-y.min())
-ymax=y.max()+.05*(y.max()-y.min())
+a=y
+#a=y/(y+z)
+ymin=a.min()-.05*(a.max()-a.min())
+ymax=a.max()+.05*(a.max()-a.min())
 
-pylab.ylabel('amorphous fraction after cooling')
-pylab.xlabel('cooling rate (K/s)', fontsize=14)
+pylab.ylabel('amorphous fraction after cooling', fontsize=14)
+#pylab.ylabel('amorph / amorph+phaseB', fontsize=14)
+pylab.xlabel('cooling rate at 320C (K/s)', fontsize=14)
 pylab.title('colored by composition', fontsize=14)
 #pylab.ylabel(, fontsize=14)
 pylab.xlim(xmin, xmax)

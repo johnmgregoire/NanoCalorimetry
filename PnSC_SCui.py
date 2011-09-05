@@ -55,7 +55,9 @@ class SCrecipeDialog(QDialog):
             ncalcs=self.CTpksetup()
             self.filterd['gridata']=self.griddatafilterdflt()
             self.filterd['peaksearchfit']=self.peakfitfilterdflt()
-
+        elif self.calctype=='AC':
+            ncalcs=self.ACpksetup()
+            self.filterd['ac_harmonics']=self.acfilterdflt()
         #*****************************************************
         importfiltersButton=QPushButton()
         importfiltersButton.setText("import filters\n(overwrites if same name)")
@@ -297,16 +299,89 @@ class SCrecipeDialog(QDialog):
         self.parLayout.addWidget(d['widget'])
         d['savename']='PROFILEANALYSIS_sampleheatcapacity_sampletemperature'
         d['fcns']=[CTpks_secder]
-        d['parnames']=[ ['C', 'T']]
+        d['parnames']=[['C', 'T']]
         d['segdkeys']=[['sampleheatcapacity', 'sampletemperature']]
-        d['postcombofcns']=[self.nofilterfill, self.nofilterfill]
+        d['postcombofcns']=[self.nofilterfill]
         d['parcombofcns']=[[self.peakfitfilterfilterfill, self.griddatafilterfill]]
         d['slider'].setMaximum(len(d['parnames'])-1)
         self.pardlist+=[copy.copy(d)]
         QObject.connect(d['slider'], SIGNAL("sliderReleased()"), self.slidermoved0)
-        
         return 1
 
+    def ACpksetup(self):
+        d=self.calclayoutgen('FFTI', ['Windowed FFT'])
+        self.parLayout.addWidget(d['widget'])
+        d['savename']='WinFFT_current'
+        d['fcns']=[WinFFTI]
+        d['parnames']=[['I']]
+        d['segdkeys']=[['samplecurrent']]
+        d['postcombofcns']=[self.nofilterfill]
+        d['parcombofcns']=[[self.winfftfilterfill]]
+        d['slider'].setMaximum(len(d['parnames'])-1)
+        self.pardlist+=[copy.copy(d)]
+        QObject.connect(d['slider'], SIGNAL("sliderReleased()"), self.slidermoved0)
+        
+        d=self.calclayoutgen('FFTV', ['Windowed FFT'])
+        self.parLayout.addWidget(d['widget'])
+        d['savename']='WinFFT_voltage'
+        d['fcns']=[WinFFTV]
+        d['parnames']=[['V']]
+        d['segdkeys']=[['samplevoltage']]
+        d['postcombofcns']=[self.nofilterfill]
+        d['parcombofcns']=[[self.winfftfilterfill]]
+        d['slider'].setMaximum(len(d['parnames'])-1)
+        self.pardlist+=[copy.copy(d)]
+        QObject.connect(d['slider'], SIGNAL("sliderReleased()"), self.slidermoved1)
+        
+        d=self.calclayoutgen('FFTfV', ['Windowed FFT'])
+        self.parLayout.addWidget(d['widget'])
+        d['savename']='WinFFT_filteredvoltage'
+        d['fcns']=[WinFFTfV]
+        d['parnames']=[['fV']]
+        d['segdkeys']=[['samplefilteredvoltage']]
+        d['postcombofcns']=[self.nofilterfill]
+        d['parcombofcns']=[[self.winfftfilterfill]]
+        d['slider'].setMaximum(len(d['parnames'])-1)
+        self.pardlist+=[copy.copy(d)]
+        QObject.connect(d['slider'], SIGNAL("sliderReleased()"), self.slidermoved2)
+        
+        d=self.calclayoutgen('LIAI', ['LIA math'])
+        self.parLayout.addWidget(d['widget'])
+        d['savename']='LIAharmonics_current'
+        d['fcns']=[LIAI]
+        d['parnames']=[['I']]
+        d['segdkeys']=[['samplecurrent']]
+        d['postcombofcns']=[self.nofilterfill]
+        d['parcombofcns']=[[self.liafilterfill]]
+        d['slider'].setMaximum(len(d['parnames'])-1)
+        self.pardlist+=[copy.copy(d)]
+        QObject.connect(d['slider'], SIGNAL("sliderReleased()"), self.slidermoved3)
+        
+        d=self.calclayoutgen('LIAV', ['LIA math'])
+        self.parLayout.addWidget(d['widget'])
+        d['savename']='LIAharmonics_voltage'
+        d['fcns']=[LIAV]
+        d['parnames']=[['V']]
+        d['segdkeys']=[['samplevoltage']]
+        d['postcombofcns']=[self.nofilterfill]
+        d['parcombofcns']=[[self.liafilterfill]]
+        d['slider'].setMaximum(len(d['parnames'])-1)
+        self.pardlist+=[copy.copy(d)]
+        QObject.connect(d['slider'], SIGNAL("sliderReleased()"), self.slidermoved4)
+        
+        d=self.calclayoutgen('LIfV', ['LIA math'])
+        self.parLayout.addWidget(d['widget'])
+        d['savename']='LIAharmonics_filteredvoltage'
+        d['fcns']=[LIAfV]
+        d['parnames']=[['fV']]
+        d['segdkeys']=[['samplefilteredvoltage']]
+        d['postcombofcns']=[self.nofilterfill]
+        d['parcombofcns']=[[self.liafilterfill]]
+        d['slider'].setMaximum(len(d['parnames'])-1)
+        self.pardlist+=[copy.copy(d)]
+        QObject.connect(d['slider'], SIGNAL("sliderReleased()"), self.slidermoved5)
+        return 6
+        
     def ExitRoutine(self):
         if self.saveCheckBox.isChecked():
             self.savefilters()
@@ -368,6 +443,7 @@ class SCrecipeDialog(QDialog):
                 arr=f(**dict(partups+partup_seg+namsegkfilk))
                 arr=performgenericfilter(arr, self.filterd[postfilk])
                 self.hpsegdlist[si][saven]=arr
+                print self.hpsegdlist[si]['cycletime'].shape, arr.shape
             if self.calctype=='FitPS':
                 segd=self.hpsegdlist[si]
                 parttime=segd['cyclepartition']
@@ -406,7 +482,9 @@ class SCrecipeDialog(QDialog):
         self.updateparwidgets(3)
     def slidermoved4(self):
         self.updateparwidgets(4)
-
+    def slidermoved5(self):
+        self.updateparwidgets(5)
+        
     def updateparwidgets(self, widgetind=None):
         if widgetind is None:
             widgetind=range(len(self.pardlist))
@@ -535,6 +613,11 @@ class SCrecipeDialog(QDialog):
     def refpathfilterfill(self, cb):
         self.filterfill(cb, reqkeys=['REFh5path', 'REFalignment'])
     
+    def liafilterfill(self, cb):
+        self.filterfill(cb, reqkeys=['n1wcycles_window', 'harmonics'])
+    def winfftfilterfill(self, cb):
+        self.filterfill(cb, reqkeys=['n1wcycles_window'])
+        
     def dfltfitfilterdicts(self, deriv=0):
         return [{'name':'timepart', 'numpartitions':1}, #contants and any other piecewise parameters have this many segments and these starting values\
                     {'name':'fit_T4','fitpars':[1.e-8, 1.e-10, 1.e-12, 1.e-14]}, \
@@ -560,7 +643,9 @@ class SCrecipeDialog(QDialog):
         'firstdernpts':10, 'firstderorder':1, 'secdernpts':20, 'secderorder':1, \
         'critcurve':None, 'pospeaks':1, 'negpeaks':1}
     
-    
+    def acfilterdflt(self):
+        return {'n1wcycles_window':2, 'harmonics':[1, 2, 3]}
+
     def Nonefilterdict(self):
         return {'None':None, \
                 }
@@ -1587,6 +1672,43 @@ def CTpks_secder(segd, fild, C, T, h5path=None, h5expname=None, h5hpname=None):
         PROFILEANALYSIS['residuals_peaks']=numpy.float32(residlist)
 
     return PROFILEANALYSIS
+
+def WinFFTI(segd, fild, I, h5path, h5expname, h5hpname):
+    return WinFFT(segd, fild, I, h5path, h5expname, h5hpname)
+def WinFFTV(segd, fild, V, h5path, h5expname, h5hpname):
+    return WinFFT(segd, fild, V, h5path, h5expname, h5hpname)
+def WinFFTfV(segd, fild, fV, h5path, h5expname, h5hpname):
+    return WinFFT(segd, fild, fV, h5path, h5expname, h5hpname)
+    
+def WinFFT(segd, fild, X, h5path, h5expname, h5hpname):
+    ptspercyc=pts_sincycle_h5(h5path, h5expname, h5hpname)
+
+    (segkey, filkey)=X
+    n=ptspercyc*fild[filkey]['n1wcycles_window']
+    #for i in fild[filkey]['harmonics']:
+    ans=numpy.empty((segd[segkey].shape[0], segd[segkey].shape[1], n//2+1, 2), dtype='float32')
+    for i, arr in enumerate(segd[segkey]):
+        ans[i, :, :, 0], ans[i, :, :, 1]=windowfft_ampphase(arr, n)
+        #****
+    return ans #makes array that is cycles x nptsinsegx nptsinfftx2 , the frequencies are in units of daqHz and are  numpy.array(range(n//2+1))/n.
+
+def LIAI(segd, fild, I, h5path, h5expname, h5hpname):
+    return LIA(segd, fild, I, h5path, h5expname, h5hpname)
+def LIAV(segd, fild, V, h5path, h5expname, h5hpname):
+    return LIA(segd, fild, V, h5path, h5expname, h5hpname)
+def LIAfV(segd, fild, fV, h5path, h5expname, h5hpname):
+    return LIA(segd, fild, fV, h5path, h5expname, h5hpname)
+
+def LIA(segd, fild, X, h5path, h5expname, h5hpname):
+    ptspercyc=pts_sincycle_h5(h5path, h5expname, h5hpname)
+    (segkey, filkey)=X
+    hlist=fild[filkey]['harmonics']
+    ans=numpy.empty((segd[segkey].shape[0], segd[segkey].shape[1], len(hlist), 2), dtype='float32')
+    for i, arr in enumerate(segd[segkey]):
+        for j, h in enumerate(hlist):
+            ans[i, :, j, 0], ans[i, :, j, 1]=lia_ampphase(arr, ptspercyc/h, ncyclewin=fild[filkey]['n1wcycles_window']*h, phaseshift=0.)
+    return ans #makes array that is cycles x nptsinsegxharmonic x 2foramp+phase
+    
 #p='C:/Users/JohnnyG/Documents/PythonCode/Vlassak/NanoCalorimetry/Nanocopeia1_PnSC.h5'
 ##p='C:/Users/JohnnyG/Documents/HarvardWork/pharma/PnSC/Nanocopeia1_PnSC.h5'
 #e='NoSampleRamps'
@@ -1594,6 +1716,18 @@ def CTpks_secder(segd, fild, C, T, h5path=None, h5expname=None, h5hpname=None):
 #
 #mainapp=QApplication(sys.argv)
 #form=SCrecipeDialog(None, p, e, h)
+##form=analysisviewerDialog(None,CreateHeatProgSegDictList(p,e,h))
+#form.show()
+#form.setFocus()
+#mainapp.exec_()
+
+
+#p='C:/Users/JohnnyG/Documents/PythonCode/Vlassak/NanoCalorimetry/20110714_SnACcal.h5'
+#e='Sn_10kHz_4e4Ks'
+#h='cell29_57.75dc56.1ac_10kHz_12.6ms_1_of_1'
+#
+#mainapp=QApplication(sys.argv)
+#form=SCrecipeDialog(None, p, e, h, calctype='AC')
 ##form=analysisviewerDialog(None,CreateHeatProgSegDictList(p,e,h))
 #form.show()
 #form.setFocus()

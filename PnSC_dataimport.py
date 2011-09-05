@@ -3,7 +3,7 @@ import matplotlib.cm as cm
 import numpy
 import h5py
 import os, os.path, time, copy
-
+import struct
 from PnSC_ui import *
 from PnSC_math import *
 from PnSC_h5io import *
@@ -69,8 +69,8 @@ def nanhandler(s):
         return numpy.nan
         
 def truncate_arrlist_shortest(arrlist):
-    ln=numpy.uint16([arr.shape for arr in arrlist]).T
-    ind=(numpy.uint16(range(l.min())) for l in ln)
+    ln=numpy.uint32([arr.shape for arr in arrlist]).T
+    ind=(numpy.uint32(range(l.min())) for l in ln)
     for i, l in enumerate(ln):
         l=l.min()
         arrlist=[arr.take(range(l), axis=i) for arr in arrlist]
@@ -104,7 +104,7 @@ def JimDAQ_SC(parent, filepath, batchattrdict=None):
     d['ambient_atmosphere']='vacuum'
     d['ambient_tempC']=20.
     return d, ds, [[], []]
-    
+      
 def JimDAQ_fileiterator(filepath):#filepath is a .dat file from any cycle
     folderpath, filename=os.path.split(filepath)
     a, c=os.path.splitext(filename)
@@ -151,6 +151,136 @@ def readdat_JimDAQ(path):
         v+=[[eval(x) for x in t]]
 
     return d, numpy.float32(v).T
+
+def JimDAQ2011_SC(parent, filepath, batchattrdict=None):
+    dlist, arrlist=JimDAQ2011_fileiterator(filepath)
+    arr=truncate_arrlist_shortest(arrlist)
+    d=JimDAQ2011_translateheader(dlist[0])
+    d['ncycles']=len(dlist)
+    ds={}
+    ds['samplecurrent']=({'Aunit':0.001}, arr[:, :, 0])
+    ds['samplevoltage']=({'Vunit':0.001}, arr[:, :, 3])
+    d['CELLNUMBER']=JimDAQ_getcell(filepath)
+    return d, ds, [[], []]
+
+def JimDAQ2011_acSC(parent, filepath, batchattrdict=None):
+    dlist, arrlist=JimDAQ2011_fileiterator(filepath)
+    arr=truncate_arrlist_shortest(arrlist)
+    print arr.shape
+    d=JimDAQ2011_translateheader(dlist[0])
+    d['ncycles']=len(dlist)
+    if not 'pts_sincycle' in d.keys():
+        d['pts_sincycle']=30.
+    ds={}
+    ds['samplecurrent']=({'Aunit':0.001}, arr[:, :, 0])
+    ds['samplevoltage']=({'Vunit':0.001}, arr[:, :, 3])
+    ds['samplefilteredvoltage']=({'Vunit':0.001}, arr[:, :, 4])
+    d['CELLNUMBER']=JimDAQ_getcell(filepath)
+    return d, ds, [[], []]
+
+
+
+def JimDAQ2011_translateheader(d):
+    dummyfcn=lambda x:x
+    key_headerkey_fcn_dflt=[\
+    ('operator', 'name', dummyfcn,''),\
+    ('epoch', 'date', lambda c:time.mktime(time.strptime(c.strip(),'%a, %m/%d/%Y %I:%M:%S %p')), 0), \
+    ('ambient_tempC', 'furnace temp (C)', dummyfcn, 20.),\
+    ('ambient_atmosphere', 'atmosphere', dummyfcn, 'vacuum'),\
+    ('daqHz', 'daqtime_us', lambda c:1.e6/c, 301204.8), \
+    ]
+    for k, hk, f, dflt in key_headerkey_fcn_dflt:
+        if hk in d.keys():
+            temp=d[hk]
+            del d[hk]
+            d[k]=f(temp)
+        else:
+            d[k]=dflt
+    return d
+    
+def JimDAQ2011_fileiterator(filepath):#filepath is a .dat file from any cycle
+    folderpath, filename=os.path.split(filepath)
+    a, c=os.path.splitext(filename)
+    a, b, n=a.rpartition('_of_')
+    a, atemp, i=a.rpartition('_')
+    a+=atemp
+    i=eval(i)
+    n=eval(n)
+    
+    filelist=os.listdir(folderpath)
+    dlist=[]
+    arrlist=[]
+    for cnum in range(1, n+1):
+        fn='%s%d%s%d%s' %(a, cnum, b, n, c)
+        if fn in filelist:
+            p=os.path.join(folderpath, fn)
+            print 'reading: ', p
+            t1, t2=readdat_JimDAQ2011(p)
+            dlist+=[t1]
+            arrlist+=[t2]
+    return dlist, arrlist
+
+def uint16tofloat32(x, offsetbinary=True, posfullscale=1.):#a negative posfullscale value will invert
+    if not offsetbinary:
+        x+=32768
+    return numpy.float32(posfullscale*(x/32768.-1.))
+
+def readdat_JimDAQ2011(path, startofheader=':header_start:', endofheader=':header_end:\r\n'): 
+    #startofheader does not have to be start of file but endofheader has to include the character that is just before binary uint16 data
+    #read all keyword attributes and any in the comments section
+    f=open(path, 'rb')
+    bdata=f.read()
+    f.close()
+    headstr, garb, uintdata=bdata.partition(endofheader)
+    if len(uintdata)%8>0:
+        uintdata=uintdata[:-1*(len(uintdata)%8)]
+    z=[struct.unpack('>H',uintdata[i:i+2]) for i in range(0,len(uintdata),2)] # '>8' is big-endian uint16, Labview uses big-endian
+    z=numpy.reshape(numpy.uint16(z),(len(z)//8,8))
+    
+    
+    def attemptnumericconversion(s):
+        if (s.replace('.', '', 1).replace('e', '', 1).replace('+', '', 1).replace('-', '', 1)).isalnum():
+            try:
+                return eval(s)
+            except:
+                pass
+        return s
+    garb, garb, headstr=headstr.partition(startofheader)    
+    d={}
+    while len(headstr)>0:
+        a, garb, headstr=headstr.partition('\n')
+        a=a.strip()
+        if a.startswith(':'):
+            b, garb, c=a[1:].partition(':')
+            d[b]=attemptnumericconversion(c.strip())
+        if a.startswith(':coms:'):
+            b, garb, c=a[1:].partition(':')
+            i=0
+            while i<len(c)-1:
+                j=c.find(':', i)
+                k=c.find(':', i+j+1)
+                if j<0 or k<0:
+                    break
+                i=c.find(':', k+1)
+                if i<0:
+                    i=len(c)-1
+                d[c[j+1:k]]=attemptnumericconversion((c[k+1:i]).strip())
+    fullscalelist=[]
+    c=d['fullscale_fields']
+    if '\t' in c:
+        delim='\t'
+    else:
+        delim=' '
+    while len(c)>0:
+        a, garb, c=c.partition(delim)
+        a=a.strip()
+        c=c.strip()
+        a=a.lstrip('0').rstrip('.')
+        a=(a=='' and (0,) or (eval(a),))[0]
+        fullscalelist+=[a]
+    
+    z=numpy.float32([uint16tofloat32(z[:, i], offsetbinary=ziz, posfullscale=fullsc) for i, (ziz, fullsc) in enumerate(zip([0, 0, 0, 0, 0, 1, 1, 0], fullscalelist))]).T
+    return d, z
 
 def PatDAQ_filenamedecode(filepath):
     folderpath, filename=os.path.split(filepath)
@@ -388,14 +518,15 @@ def PatDAQ2011_SC(parent, filepath, batchattrdict=None):
     return d, ds, SegmentData
     
 FileFormatFunctionLibrary={\
+                    'JimDAQ2011_acSC':JimDAQ2011_acSC, \
                    'PatDAQ_SC':PatDAQ_SC, \
                    'PatDAQ2011_SC':PatDAQ2011_SC, \
                    'JimDAQ_SC':JimDAQ_SC, \
+                   'JimDAQ2011_SC':JimDAQ2011_SC, \
 #                   'JimDAQ_DSC':JimDAQ_DSC, \
 #                   'JimDAQ_DTA':JimDAQ_DTA, \
                    }
 
 
-#a, b, c=JimDAQ_SC('C:\Users\JohnnyG\Documents\HarvardWork\ExampleJimDAQ_SC\S11_85mA_60ms_1_of_11.csv')
-
-
+#p='C:/Users/JohnnyG/Documents/HarvardWork/ACcal/20110708_initACtests/cell29_10Ohm_10mAdc_9mA10kHz_9kHz11kHzfilter_wTtokeithley_1_of_1.dat'
+#dlist, arrlist=JimDAQ2011_fileiterator(p)

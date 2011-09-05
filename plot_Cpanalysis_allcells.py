@@ -75,7 +75,8 @@ for selectcell in celllist:
     #p=mm.h5path
     #f=h5py.File(p, mode='r+')
     #f=h5py.File(p, mode='r')
-    savef='C:/Users/JohnnyG/Documents/HarvardWork/MG/PnSCplots/batchplotbycell_June2'
+    savef='C:/Users/JohnnyG/Documents/HarvardWork/MG/PnSCplots/batchplotbycell_June2/Cpanalysiswithfit'
+    
 
 
     plotTlim=(50., 700.)
@@ -140,6 +141,9 @@ for selectcell in celllist:
         print metadict['name']
         T=hpsdl[metadict['heatseg']]['sampletemperature'][cycleindex]
         C=hpsdl[metadict['heatseg']]['sampleheatcapacity'][cycleindex]
+        tp=hpsdl[metadict['heatseg']]['cyclepartition'][cycleindex]
+        PdT=hpsdl[metadict['heatseg']]['samplepowerperrate'][cycleindex]
+        
         if selectcell==10 and metadict['name']=='heat2':
             C=C[T<680]
             T=T[T<680]
@@ -159,6 +163,8 @@ for selectcell in celllist:
             print T.max()
             C=C[T<635]
             T=T[T<635]
+            
+        #Cp plots
         axl[count].plot(T, mult*C, '-', color=cols[count], lw=1, label=metadict['name'])
         
         rxnindlist=[metadict['Cpregions_glassind'], metadict['Cpregions_xtalind'], metadict['Cpregions_meltind'], metadict['Cpregions_melt2ind']]
@@ -172,7 +178,16 @@ for selectcell in celllist:
             axl[count].fill(T[i:j], mult*C[i:j], color=col, hatch=hatch, alpha=0.3)
             #axl[count].plot(Tp, mult*Cp, 'kx')
             #axl[count].plot(Tmean, 0, 'k*')
-
+        
+        #Cp fit plots
+        idialog=fitplotDialog(parent, xdata, ydata, yfitdata, hpsdl[fitd['seg']]['cyclepartition'])
+            def plot(self):
+        colors=['k']+['r', 'g', 'c', 'm', 'y', 'b']*5
+        tp=
+            for i in range(-1, self.numpieces):
+                if numpy.any(tp==i):
+                    self.plotw.axes.plot(self.cycletime[cyc][tp==i], self.yvals[cyc][tp==i], '.', markersize=1, color=colors[i+1])
+                    
     for ax in axl:
         if selectcell==1:
             ax.set_ylim(-1.2, 5.4)
@@ -212,7 +227,7 @@ for selectcell in celllist:
     axl[2].set_ylabel(r'Heat Capacity ($\mu$J/K),  endothermic ->', fontsize=14)
     axl[0].set_xlabel('Temperature (C)', fontsize=14)
     pylab.subplots_adjust(right=.95, top=0.95, hspace=0.01)
-    pylab.savefig(os.path.join(os.path.join(savef, 'cell%02d' %selectcell), 'Cpstack_cell%02d_%s.png' %(selectcell, namestack)))
+    pylab.savefig(os.path.join(savef, 'Cpstack_cell%02d_%s.png' %(selectcell, namestack)))
 
     #only show xrd data if the prevname pnsc scan was the last performed before an xrd experiment
     phasecomps=[]

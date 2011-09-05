@@ -7,7 +7,7 @@ import PnSC_ui
 #from PnSC_ui import *
 #from PnSC_SCui import *
 #from PnSC_dataimport import *
-#from PnSC_math import *
+from PnSC_math import *
 
 v=numpy.linspace(-16,16,5)
 xmm=numpy.float32([x for i in range(5) for x in v])
@@ -120,6 +120,19 @@ def dt_h5(h5path, h5expname, h5hpname):
     h5file.close()
     return dt
 
+def atm_h5(h5path, h5expname, h5hpname):
+    h5file=h5py.File(h5path, mode='r')
+    h5hp=h5file['Calorimetry'][h5expname]['measurement']['HeatProgram'][h5hpname]
+    atm=h5hp.attrs['ambient_atmosphere']
+    h5file.close()
+    return atm
+    
+def pts_sincycle_h5(h5path, h5expname, h5hpname):
+    h5file=h5py.File(h5path, mode='r')
+    h5hp=h5file['Calorimetry'][h5expname]['measurement']['HeatProgram'][h5hpname]
+    n=h5hp.attrs['pts_sincycle']
+    h5file.close()
+    return n
 def gethpgroup(h5pf, h5expname, h5hpname=None):
     if isinstance(h5pf, str):
         h5file=h5py.File(h5pf, mode='r')
@@ -223,11 +236,12 @@ def saveSCcalculations(h5path, h5expname, h5hpname, hpsegdlist, recname):
         h5g=h5an[h5hpname]
     else:
         h5g=h5an.create_group(h5hpname)
-    savekeys=set([k for d in hpsegdlist for k in d.keys() if not ('~' in k or k in h5hp[h5hpname] or k=='cycletime') and isinstance(d[k], numpy.ndarray) and d[k].shape==d['cycletime'].shape])
-    nansegs=[numpy.ones(d['cycletime'].shape, dtype=d['cycletime'].dtype)*numpy.nan for d in hpsegdlist]
+    savekeys=set([(k, d[k].shape[2:], d[k].dtype) for d in hpsegdlist for k in d.keys() if not ('~' in k or k in h5hp[h5hpname] or k=='cycletime') and isinstance(d[k], numpy.ndarray) and d[k].shape[:2]==d['cycletime'].shape])
+    #nansegssh=[numpy.ones(d['cycletime'].shape, dtype=d['cycletime'].dtype)*numpy.nan for d in hpsegdlist]
+    nansegssh=[d['cycletime'].shape for d in hpsegdlist]
     mastershape=piecetogethersegments([d['cycletime'] for d in hpsegdlist]).shape
-    for k in list(savekeys):
-        savearr=piecetogethersegments([(k in d.keys() and (d[k],) or (ns,))[0] for d, ns in zip(hpsegdlist, nansegs)])
+    for k, endshape, dtype in list(savekeys):
+        savearr=piecetogethersegments([(k in d.keys() and (d[k],) or (numpy.ones(ns+endshape, dtype=dtype)*numpy.nan,))[0] for d, ns in zip(hpsegdlist, nansegssh)])
         if k in h5g:
             del h5g[k]
         ds=h5g.create_dataset(k, data=savearr)
@@ -324,6 +338,13 @@ def writecellres(h5path, h5expname, h5hpname, R):
     h5res.attrs['ambient_tempC'][i]=h5hpgrp.attrs['ambient_tempC']
     h5file.close()
 
+def writecellres_calc(h5path, h5expname, h5hpname, R):
+    h5file=h5py.File(h5path, mode='r+')
+    h5hpgrp=gethpgroup(h5file, h5expname, h5hpname)
+    h5hpgrp.attrs['Ro']=R
+    h5file.close()
+    
+
 def experimentgrppaths(h5pf):
     if isinstance(h5pf, str):
         h5file=h5py.File(h5pf, mode='r')
@@ -361,14 +382,17 @@ def AddRes_CreateHeatProgSegDictList(hpsegdlist, SGnpts_curr=100, SGorder_curr=3
             v=replacevalswithneighsin2nddim(v, inds)
             d['sampleresistance']=v/c
             
-def RoToAl_h5(h5path, h5expname, h5hpname):
+def RoToAl_h5(h5path, h5expname, h5hpname):#get from the array for the experiment group, an Ro attr in the hp will be used instead if it is available, TODO: should the same be done with To???
     #rtcpath=rescalpath_getorassign(h5path, h5expname)
     h5file=h5py.File(h5path, mode='r')
     rtcpath=rescalpath_getorassign(h5file, h5expname)
     if not h5file:#in case ti was closed in the fcn
         h5file=h5py.File(h5path, mode='r')
-    i=getindex_cell(h5file, gethpgroup(h5file, h5expname, h5hpname).attrs['CELLNUMBER'])
+    h5hp=gethpgroup(h5file, h5expname, h5hpname)
+    i=getindex_cell(h5file, h5hp.attrs['CELLNUMBER'])
     restempal=h5file[rtcpath][i]
+    if 'Ro' in h5hp.attrs.keys():
+        restempal[0]=h5hp.attrs['Ro']
     h5file.close()
     return restempal[0], restempal[1], restempal[2]
 
@@ -613,11 +637,37 @@ heatprogrammetadatafcns={\
 'Cell Temperature':tempvsms_heatprogram, \
 }#each must take h5path, h5expname, h5hpname as arguments
 
-#p='C:/Users/JohnnyG/Documents/HarvardWork/pharma/PnSC/Nanocopeia1_PnSC.h5'
-#e='NoSampleRamps'
-#h='20110203Nanocop_ramp_160ms_10mA_cell10'
+
+def calcRo_extraptoTo(h5path, h5expname, h5hpname, segind, inds_calcregion, nprevsegs=1, cycind=0, o_R2poly=1, iterations=1):
+    hpsegdlist=CreateHeatProgSegDictList(h5path, h5expname, h5hpname)
+    d={}
+    d['I2']=hpsegdlist[segind]['samplecurrent'][cycind][inds_calcregion[0]:inds_calcregion[1]]
+    d['V2']=hpsegdlist[segind]['samplevoltage'][cycind][inds_calcregion[0]:inds_calcregion[1]]
+    #T2=hpsegdlist[segind]['sampletemperature'][cycind][inds_calcregion[0]:inds_calcregion[1]]
+    I1=hpsegdlist[segind]['samplecurrent'][cycind][:inds_calcregion[0]]
+    V1=hpsegdlist[segind]['samplevoltage'][cycind][:inds_calcregion[0]]
+    for i in range(1, nprevsegs+1):
+        I1=numpy.concatenate([I1, hpsegdlist[segind-i]['samplecurrent'][cycind][:inds_calcregion[0]]])
+        V1=numpy.concatenate([V1, hpsegdlist[segind-i]['samplevoltage'][cycind][:inds_calcregion[0]]])
+    d['I1']=I1
+    d['V1']=V1
+    d['RoToAl']=RoToAl_h5(h5path, h5expname, h5hpname)
+    d['o_R2poly']=o_R2poly
+    print d['RoToAl'][0]
+    for i in range(iterations):
+        f=calcRofromheatprogram
+        Ro, d2=f(**dict([(k, v) for k, v in d.iteritems() if k in f.func_code.co_varnames[:f.func_code.co_argcount]]))
+        for k, v in d2.iteritems():
+            d[k]=v
+        if i==0:
+            d['RoToAl_original']=copy.copy(d['RoToAl'])
+        d['RoToAl']=(Ro, d['RoToAl'][1], d['RoToAl'][2])
+        print d['RoToAl'][0]
+    return Ro, d
+
+#p='C:/Users/JohnnyG/Documents/PythonCode/Vlassak/NanoCalorimetry/20110816_Zr-Hf-B.h5'
+#e='quadlinheating2'
+#h='cell17_25malinquad2repeat_1_of_1'
 #
-#e='Res_nosample_150C'
-#h='20110202nanocop_150C_1mA_cell2'
-#ans=tempvsms_heatprogram(p, e, h)
+#ans, d=calcRo_extraptoTo(p, e, h, 2, (50, 1000), o_R2poly=2, iterations=3)
 #print 'done'

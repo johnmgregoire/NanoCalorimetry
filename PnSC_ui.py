@@ -881,14 +881,14 @@ class rescalDialog(QDialog):
         #self.imagenamelist=[]
         counter=0
         for grp in h5cal.iterobjects():
-            if 'CellResistance' in grp['analysis']:
+            if 'analysis' in grp and 'CellResistance' in grp['analysis']:
                 #self.imagenamelist+=[(grp.name).rpartition('/')[2]]
                 for cb in self.arrComboBoxlist:
                     cb.insertItem(counter, (grp.name).rpartition('/')[2])
                 self.arrpathlist+=[grp['analysis/CellResistance'].name]
                 counter+=1
-        self.arrComboBoxlist[1].insertItem(999, 'None')
-        self.arrComboBoxlist[1].setCurrentIndex(999)
+        self.arrComboBoxlist[1].insertItem(counter, 'None')
+        self.arrComboBoxlist[1].setCurrentIndex(counter)
         self.h5file.close()
     def calcansave(self):
         self.h5file=h5py.File(self.h5path, mode='r+')
@@ -946,9 +946,12 @@ class rescalDialog(QDialog):
             del grp['Res_TempCal']
         ds=grp.create_dataset('Res_TempCal', data=savearr)
         ds.attrs['doc']='numpts x 3 array where the 3 are R0, T0 and alpha'
-        ds.attrs['Ro']=pnts[0].name
-        if not pnts[1] is None:
-            ds.attrs['Rovaluesaveragedwith']=pnts[1].name
+        if Rdfltbool:
+            ds.attrs['Ro']='user-entered'
+        else:
+            ds.attrs['Ro']=pnts[0].name
+            if not pnts[1] is None:
+                ds.attrs['Rovaluesaveragedwith']=pnts[1].name
         self.h5file.close()
 
 
@@ -1651,3 +1654,99 @@ class peakfiteditDialog(QDialog):
         
     def savefig(self, p, dpi=300):
         self.plotw.fig.savefig(p, dpi=dpi)
+            
+class rescal_ExtraptoToDialog(QDialog):
+    def __init__(self, parent, pardict, Rinit=0.):
+        super(rescal_ExtraptoToDialog, self).__init__(parent)
+        self.Rinit=Rinit
+        self.pardict=pardict
+        self.hpsdl=CreateHeatProgSegDictList(self.pardict['h5path'], self.pardict['h5expname'], self.pardict['h5hpname'])
+        segtypelist=[d['segmenttype'] for d in self.hpsdl]
+        ncyc=self.hpsdl[0]['cycletime'].shape[0]
+        segi=2
+        if segtypelist.count('soak')>=1:
+            segi=segtypelist.index('soak')
+            nprev=0
+            for i in range(1, segi):
+                if segtypelist[segi-i]=='zero':
+                    break
+                nprev+=1
+            dsoak=self.hpsdl[segi]
+        self.key_dflt_lab_min_max=[\
+        ('segind', segi, 'cycle to use for extrapolation', 0, len(self.hpsdl)), \
+        ('o_R2poly', 1, 'R(t) fit polynomial order', 0, 4), \
+        ('iterations', 1, 'number iterations', 1, 10), \
+        ('cycind', 0, 'cycle to use for extrapolation', 0, ncyc), \
+        ('nprevsegs', nprev, 'number of previous cycles to extrap over', 0, 100), \
+        (None, 0, 'starting index of extrap cycle', 0, 10000), \
+        (None, 1000, 'stoping index of extrap cycle', 0, 10000), \
+        ]
+        
+        mainlayout=QGridLayout()
+        
+        nrows=len(self.key_dflt_lab_min_max)+2
+        self.spinboxlist=[]
+        for i, (k, v, l, mi, ma) in enumerate(self.key_dflt_lab_min_max):
+            lb=QLabel()
+            lb.setText(l)
+            sb=QSpinBox()
+            sb.setRange(mi, ma)
+            sb.setValue(v)
+            self.spinboxlist+=[sb]
+            mainlayout.addWidget(lb, i, 0)
+            mainlayout.addWidget(sb, i, 1)
+        
+        calcButton=QPushButton()
+        calcButton.setText("Calc Ro")
+        QObject.connect(calcButton, SIGNAL("pressed()"), self.calc)
+        
+        limsButton=QPushButton()
+        limsButton.setText("update limits")
+        QObject.connect(limsButton, SIGNAL("pressed()"), self.updatelims)
+        
+        mainlayout.addWidget(limsButton, nrows-2, 0)
+        mainlayout.addWidget(calcButton, nrows-2, 1)
+        
+        self.resultLabel=QLabel()
+        mainlayout.addWidget(self.resultLabel, 0, 2, 2, 4)
+        self.plotw=plotwidget(self)
+        mainlayout.addWidget(self.plotw, 2, 2, nrows-2, 4)
+
+        self.buttonBox = QDialogButtonBox(self)
+        self.buttonBox.setGeometry(QRect(520, 195, 160, 26))
+        self.buttonBox.setOrientation(Qt.Horizontal)
+        self.buttonBox.setStandardButtons(QDialogButtonBox.Cancel|QDialogButtonBox.Ok)
+        QObject.connect(self.buttonBox, SIGNAL("accepted()"), self.accept)
+        QObject.connect(self.buttonBox, SIGNAL("rejected()"), self.reject)
+        mainlayout.addWidget(self.buttonBox, nrows-1, 0)
+         
+        QObject.connect(self.buttonBox,SIGNAL("accepted()"),self.ExitRoutine)
+        
+        self.setLayout(mainlayout)
+
+        #self.lw.setEditTriggers(QAbstractItemView.AllEditTriggers)
+        #QObject.connect(self.lw,SIGNAL("itemSelectionChanged()"),self.updateattrd)
+        
+        QMetaObject.connectSlotsByName(self)
+
+    def updatelims(self):
+        print 'update limits for indeces and previous num of segs to avoid error in calc - not implemented'
+    
+    def calc(self):
+        self.ExitRoutine()
+        self.Ro, self.calcd=calcRo_extraptoTo(**self.pardict)
+        s='Calculated Ro is %.3f.' %self.Ro
+        if self.Rinit>0:
+            s+='The prev Ro values was %.3f.' %self.Rinit
+        s+='\nThe %d points were used to fit R in the range %.3f to %.3f.' %(len(self.calcd['P2']), self.calcd['R2fit'][0], self.calcd['R2fit'][-1])
+        s+='\ndelTemp was %.1f for the fit, %.1f in the extrap range of %d points' %(self.calcd['delT2'], self.calcd['delT1'], len(self.calcd['P1']))
+        self.resultLabel.setText(s)
+    def ExitRoutine(self):
+        nokeyvals=[]
+        for i, (sb, (k, v, l, mi, ma)) in enumerate(zip(self.spinboxlist, self.key_dflt_lab_min_max)):
+            if k is None:
+                nokeyvals+=[sb.value()]
+            else:
+                self.pardict[k]=sb.value()
+        self.pardict['inds_calcregion']=tuple(nokeyvals)
+
