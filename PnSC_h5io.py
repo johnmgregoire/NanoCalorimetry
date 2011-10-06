@@ -224,6 +224,15 @@ def CreateHeatProgSegDictList(h5path, h5expname, h5hpname, critms_step=1., critm
     h5hpgrp.file.close()
     return dlist
 
+def extractcycle_SegDict(d, cycind):
+    dc={}
+    for k, v in d.iteritems():
+        if isinstance(v, numpy.ndarray) and v.shape==d['cycletime'].shape:
+            dc[k]=v[cycind:cycind+1, :]
+        else:
+            dc[k]=v
+    return dc
+    
 def piecetogethersegments(arrlist):
     cycles=arrlist[0].shape[0]
     return numpy.array([numpy.concatenate([arr[c] for arr in arrlist]) for c in range(cycles)], dtype=arrlist[0].dtype)
@@ -329,13 +338,17 @@ def writecellres(h5path, h5expname, h5hpname, R):
     h5calan=getcalanalysis(h5file, h5expname)
     if not 'CellResistance' in h5calan:
         temp=numpy.zeros(len(h5file.attrs['cells']), dtype='float32')
-        h5res=h5calan.create_dataset('CellResistance', data=temp)
-        h5res.attrs['ambient_tempC']=temp
+        h5res=h5calan.create_dataset('CellResistance', data=temp[:])
+        h5res.attrs['ambient_tempC']=temp[:]
     h5res=h5calan['CellResistance']
 
     i=getindex_cell(h5file, h5hpgrp.attrs['CELLNUMBER'])
     h5res[i]=R
-    h5res.attrs['ambient_tempC'][i]=h5hpgrp.attrs['ambient_tempC']
+    #this doesn't work for unkonw reason: h5res.attrs['ambient_tempC'][i]=h5hpgrp.attrs['ambient_tempC']
+    temp=h5res.attrs['ambient_tempC'][:]
+    temp[i]=h5hpgrp.attrs['ambient_tempC']
+    h5res.attrs['ambient_tempC']=temp[:]
+    print i, h5res.attrs['ambient_tempC'][i], h5hpgrp.attrs['ambient_tempC']
     h5file.close()
 
 def writecellres_calc(h5path, h5expname, h5hpname, R):
@@ -382,7 +395,7 @@ def AddRes_CreateHeatProgSegDictList(hpsegdlist, SGnpts_curr=100, SGorder_curr=3
             v=replacevalswithneighsin2nddim(v, inds)
             d['sampleresistance']=v/c
             
-def RoToAl_h5(h5path, h5expname, h5hpname):#get from the array for the experiment group, an Ro attr in the hp will be used instead if it is available, TODO: should the same be done with To???
+def RoToAl_h5(h5path, h5expname, h5hpname):#get from the array for the experiment group, an Ro attr in the hp will be used instead if it is available, in which case also use the local To if available
     #rtcpath=rescalpath_getorassign(h5path, h5expname)
     h5file=h5py.File(h5path, mode='r')
     rtcpath=rescalpath_getorassign(h5file, h5expname)
@@ -390,9 +403,11 @@ def RoToAl_h5(h5path, h5expname, h5hpname):#get from the array for the experimen
         h5file=h5py.File(h5path, mode='r')
     h5hp=gethpgroup(h5file, h5expname, h5hpname)
     i=getindex_cell(h5file, h5hp.attrs['CELLNUMBER'])
-    restempal=h5file[rtcpath][i]
+    restempal=list(h5file[rtcpath][i])
     if 'Ro' in h5hp.attrs.keys():
         restempal[0]=h5hp.attrs['Ro']
+        if 'ambient_tempC' in h5hp.attrs:
+            restempal[1]=h5hp.attrs['ambient_tempC']
     h5file.close()
     return restempal[0], restempal[1], restempal[2]
 
@@ -631,11 +646,32 @@ def performreferencesubtraction(segd, segkey, filter, h5path):
     arr=segd[segkey]
     ref=refh5grp[segkey][:, :]
     return numpy.array([a-r[i:i+ashape[1]] for i, a, r in zip(ref_ind, arr, ref)], dtype=arr.dtype)
-    
 
-heatprogrammetadatafcns={\
-'Cell Temperature':tempvsms_heatprogram, \
-}#each must take h5path, h5expname, h5hpname as arguments
+def savetwopointres(h5path, resarr, savename):
+    f=h5py.File(h5path, mode='r+')
+    if 'TwoPointRes' in f:
+        g=f['TwoPointRes']
+    else:
+        g=f.create_group('TwoPointRes')
+    if savename in g:
+        del g[savename]
+    ds=g.create_dataset(savename, data=resarr)
+    ds.attrs['doc']='numcellsx2 array, ordered by cells and then Res in Ohms for I-I and V-V'
+    f.close()
+
+
+def readtwopointres(h5path):
+    f=h5py.File(h5path, mode='r')
+    if 'TwoPointRes' in f:
+        g=f['TwoPointRes']
+    else:
+        return []
+    a=[]
+    for ds in g.itervalues():
+        if isinstance(ds, h5py.Dataset):
+            a+=[(ds.name.rpartition('/')[2], ds[:, :])]
+    f.close()
+    return a
 
 
 def calcRo_extraptoTo(h5path, h5expname, h5hpname, segind, inds_calcregion, nprevsegs=1, cycind=0, o_R2poly=1, iterations=1):
@@ -664,6 +700,13 @@ def calcRo_extraptoTo(h5path, h5expname, h5hpname, segind, inds_calcregion, npre
         d['RoToAl']=(Ro, d['RoToAl'][1], d['RoToAl'][2])
         print d['RoToAl'][0]
     return Ro, d
+
+
+
+heatprogrammetadatafcns={\
+'Cell Temperature':tempvsms_heatprogram, \
+}#each must take h5path, h5expname, h5hpname as arguments
+
 
 #p='C:/Users/JohnnyG/Documents/PythonCode/Vlassak/NanoCalorimetry/20110816_Zr-Hf-B.h5'
 #e='quadlinheating2'

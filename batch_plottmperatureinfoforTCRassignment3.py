@@ -12,7 +12,6 @@ from PnSC_main import *
 from matplotlib.ticker import FuncFormatter
 import scipy.integrate
 
-selectcell=1
 p='C:/Users/JohnnyG/Documents/PythonCode/Vlassak/NanoCalorimetry/AuSiCu_pnsc_all.h5'
 
 def myexpformat(x, pos):
@@ -100,9 +99,12 @@ for count, ed in enumerate(expdicts):
             if len(dt)<0:
                 continue
             dt=dt[1]-dt[0]
-            timeabove=len(numpy.where(T>1500.)[0])*dt
+            for critt in [500, 600, 700, 900, 1100, 1300, 1420, 1500]:
+                timeabove=len(numpy.where(T>(1.*critt))[0])*dt
+                ed['secabove%dC' %critt]=timeabove
+                
             ed['maxT']=maxT
-            ed['secabove1420C']=timeabove
+            
             ed['edcount']=count
             metadictlist+=[copy.deepcopy(ed)]
             if count==0:
@@ -111,6 +113,21 @@ for count, ed in enumerate(expdicts):
                 fom[cell-1, count+1]=max(maxT, numpy.max(fom[cell-1, :count+1]))
             #fom[cell-1]+=timeabove
     
+if 1:
+    f=h5py.File(p, mode='r+')
+    for ed in metadictlist:
+        if not 'maxT' in ed.keys():
+            continue
+        exp=ed['name']
+        try:
+            g=f['calbycellmetadata'][`ed['cell']`][exp]
+        except:
+            continue
+        for k, v in ed.iteritems():
+            if k=='maxT' or k.startswith('secabove'):
+                print ed['cell'],  k, v
+                g.attrs[k]=v
+    f.close()
     
 tcrcalc=lambda Tm:(Tm>1410. and (6.7e-7*(Tm-1410.), ) or (0, ))[0]+9.47e-4
 tcrall=numpy.array([[tcrcalc(t) for t in arr] for arr in fom])
@@ -120,7 +137,7 @@ tcrall=numpy.array([[tcrcalc(t) for t in arr] for arr in fom])
 #    pylab.ylabel('cell%d' %(count+1))
 #    pylab.xlabel('heat program')
 
-savebool=True
+savebool=False
 if savebool:
     f=h5py.File(p, mode='r+')
     for count, (ed, tcr_cells) in enumerate(zip(expdicts, tcrall.T)):

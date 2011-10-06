@@ -113,6 +113,7 @@ class MainMenu(QMainWindow):
         self.action_openh5=MainMenuQAction(self,'action_openh5', 'open h5 file', self.menufileio, [], self.ActionDict)
         self.action_importscdata=MainMenuQAction(self,'action_importscdata', 'import calorimetry data', self.menufileio, [('h5open', [True])], self.ActionDict)
         self.action_batchimportscdata=MainMenuQAction(self,'action_batchimportscdata', 'batch import calorimetry data setup', self.menufileio, [('h5open', [True])], self.ActionDict)
+        self.action_batchimportdatafixedmsma=MainMenuQAction(self,'action_batchimportdatafixedmsma', 'batch import calorimetry data using segment info from selected HeatProgram', self.menufileio, [('h5open', [True]), ('selectiongrouptype', ['heatprogram'])], self.ActionDict)
         self.action_createh5=MainMenuQAction(self,'action_createh5', 'new h5 file', self.menufileio, [], self.ActionDict)
         self.action_createexpgrp=MainMenuQAction(self,'action_createexpgrp', 'new experiment group', self.menufileio, [('h5open', [True])], self.ActionDict)
         self.action_delh5grp=MainMenuQAction(self,'action_delh5grp', 'DELETE selected group', self.menufileio, [('h5open', [True]), ('selectiontype', ['Group'])], self.ActionDict)
@@ -147,7 +148,10 @@ class MainMenu(QMainWindow):
         self.action_calcresistance=MainMenuQAction(self,'action_calcresistance', 'Calc cell Res (select heat program or experiment)', self.calprep, [('h5open', [True]),  ('selectiongrouptype', ['heatprogram', 'experiment'])], self.ActionDict)
         self.action_setuprescal=MainMenuQAction(self,'action_setuprescal', 'Setup R(T) cal', self.calprep, [('h5open', [True])], self.ActionDict)
         self.action_assignrescal=MainMenuQAction(self,'action_assignrescal', 'Assign R(T) cal (select experiment)', self.calprep, [('h5open', [True]), ('selectiongrouptype', ['experiment'])], self.ActionDict)
-        self.action_calcresistance=MainMenuQAction(self,'action_calcresextraptoTo', 'Calc Res that gives To (select heat program or experiment)', self.calprep, [('h5open', [True]),  ('selectiongrouptype', ['heatprogram', 'experiment'])], self.ActionDict)
+        self.action_calcresextraptoTo=MainMenuQAction(self,'action_calcresextraptoTo', 'Calc Res that gives To (select heat program or experiment)', self.calprep, [('h5open', [True]),  ('selectiongrouptype', ['heatprogram', 'experiment'])], self.ActionDict)
+        self.action_calcresbycycle=MainMenuQAction(self,'action_calcresbycycle', 'Calc Res for each cycle using first soak segment (select heat program or experiment)', self.calprep, [('h5open', [True]),  ('selectiongrouptype', ['heatprogram', 'experiment'])], self.ActionDict)
+        self.action_entertwopointres=MainMenuQAction(self,'action_entertwopointres', 'Enter list of 2 points R values', self.calprep, [('h5open', [True])], self.ActionDict)
+
         #end of actions
         
         #setup a menu section
@@ -216,7 +220,10 @@ class MainMenu(QMainWindow):
             return str(treeitem.text(0))
 
     def geth5selectionpath(self, liststyle=False, removeformatting=True):
-        treeitem=self.currenttreeitem
+        try:
+            treeitem=self.currenttreeitem
+        except:
+            return '/'
         attrname=None
         if self.statusdict['selectiontype']=='Attr':
             attrname=self.h5nodename_treeitem(treeitem, removeformatting=removeformatting)
@@ -231,6 +238,7 @@ class MainMenu(QMainWindow):
             return s, attrname
         return s
         
+
     def processtreeselection(self):
         treeitem=self.treeWidget.currentItem()
         self.currenttreeitem=treeitem
@@ -354,14 +362,48 @@ class MainMenu(QMainWindow):
                     print 'ERROR IMPORTING ', p
             else:
                 self.batchfcn(batchattrdict=self.batchattrdict)
+    
+    @pyqtSignature("")
+    def on_action_batchimportdatafixedmsma_triggered(self):
+        oldselection=self.geth5selectionpath(liststyle=True, removeformatting=False)
+        pathlist=self.geth5selectionpath(liststyle=True)
+        h5file, h5hpgrp=gethpgroup(self.h5path, pathlist[1], pathlist[4])
+        segms=h5hpgrp.attrs['segment_ms'][:]
+        segmA=h5hpgrp.attrs['segment_mA'][:]
+        sgd=selectgroupDialog(self, h5file['Calorimetry'], title='Select h5 experiment group for import')
+        if not sgd:
+            h5file.close()
+            return
+        h5file.close()
+        h5expname=sgd.grpname
+        idialog=selectorDialog(self, FileFormatFunctionLibrary.keys(), title='Select data import protocol')
+        if not idialog.exec_():
+            return
+        protname=idialog.name
+        batchattrdict=getemptybatchattrdict()
+        batchattrdict['grpname']=h5expname
+        batchattrdict['protname']=protname
+        plist=mygetopenfiles(parent=self, xpath=os.path.split(self.h5path)[0], markstr='Slsect ONE data file for each experiment to be imported', filename='.h5' )
+        for p in plist:
+            batchattrdict['path']=p
+        
+            ans=FileImport(self, protname, batchattrdict=batchattrdict)
+            #print ans
+            if not ans:
+                continue
+            AttrDict, DataSetDict, SegmentData=ans
+            grpname=os.path.splitext(os.path.split(AttrDict['importpath'])[1])[0]
+            writenewh5heatprogram(self.h5path, h5expname, grpname, AttrDict, DataSetDict, (segms, segmA))        
             
+        h5file=h5py.File(self.h5path, mode='r')
+        fillh5tree(self.treeWidget, h5file, selectionpathlist=oldselection)
+        h5file.close()
+        
     @pyqtSignature("")
     def on_action_batchimportscdata_triggered(self, batchattrdict=None):
         self.batchfcn=self.on_action_importscdata_triggered
-        self.batchattrdict={}
-        for k in ['grpname', 'protname','path','durSpinBox','nnoiseSpinBox', 'naboveSpinBox', 'nsigSpinBox', 'firstderptsSpinBox','secderptsSpinBox','secdervalSpinBox','savegrpname']:
-            self.batchattrdict[k]=None
-
+        self.batchattrdict=getemptybatchattrdict()
+        #Not finished??
     @pyqtSignature("")
     def on_action_importscdata_triggered(self, batchattrdict=None):
         if batchattrdict is None:
@@ -438,7 +480,10 @@ class MainMenu(QMainWindow):
                 print 'ERROR - NO SOAK SEGMENTS WERE FOUND - ONE IS REQUIRED FOR AN Ro HEAT PROGRAM'
                 return
             if segtypelist.count('zero')>0:
-                dzero=dlist[segtypelist.index('zero')]
+                if segtypelist[segtypelist.index('soak')-1]=='zero':
+                    dzero=dlist[segtypelist.index('soak')-1]#take the preceding zero if possible so that user can segment the initial transients separately and avoid issue
+                else:
+                    dzero=dlist[segtypelist.index('zero')]
             else:
                 dzero=None
 #            vals=[]
@@ -486,6 +531,38 @@ class MainMenu(QMainWindow):
         h5file=h5py.File(self.h5path, mode='r')
         fillh5tree(self.treeWidget, h5file, selectionpathlist=oldselection)
         h5file.close()
+
+    @pyqtSignature("")
+    def on_action_calcresbycycle_triggered(self, critms_step=1., critmAperms_constmA=0.01, critdelmA_constmA=10., critmA_zero=0.1):
+        pathlist=self.geth5selectionpath(liststyle=True)
+        if self.statusdict['selectiongrouptype']=='experiment':
+            h5file, hplist=experimenthppaths(self.h5path, pathlist[1])
+            h5file.close()
+            hplist=[hpp.rpartition('/')[2] for hpp in hplist]
+        else:
+            hplist=[pathlist[4]]
+        for hp in hplist:
+            #print hp
+            dlist=CreateHeatProgSegDictList(self.h5path, pathlist[1], hp, critms_step=critms_step, critmAperms_constmA=critmAperms_constmA, critdelmA_constmA=critdelmA_constmA, critmA_zero=critmA_zero) 
+            segtypelist=[d['segmenttype'] for d in dlist]
+            if 'soak' in segtypelist:
+                dsoak=dlist[segtypelist.index('soak')]
+            else:
+                print 'ERROR - NO SOAK SEGMENTS WERE FOUND - ONE IS REQUIRED'
+                return
+            if segtypelist.count('zero')>0:
+                if segtypelist[segtypelist.index('soak')-1]=='zero':
+                    dzero=dlist[segtypelist.index('soak')-1]#take the preceding zero if possible so that user can segment the initial transients separately and avoid issue
+                else:
+                    dzero=dlist[segtypelist.index('zero')]
+            else:
+                dzero=None
+            R0=numpy.array([CalcR0_segdict(extractcycle_SegDict(dsoak, i), AveBeforeDivision=True, dzero=extractcycle_SegDict(dzero, i)) for i in range(dsoak['cycletime'].shape[0])])
+            writecellres_calc(self.h5path, pathlist[1], hp, R0)
+        oldselection=self.geth5selectionpath(liststyle=True, removeformatting=False)
+        h5file=h5py.File(self.h5path, mode='r')
+        fillh5tree(self.treeWidget, h5file, selectionpathlist=oldselection)
+        h5file.close()
         
     @pyqtSignature("")
     def on_action_setuprescal_triggered(self):
@@ -505,6 +582,15 @@ class MainMenu(QMainWindow):
         h5file.close()
         self.actionenable()
 
+    @pyqtSignature("")
+    def on_action_entertwopointres_triggered(self):
+        idialog=TwoPointResTableDialog(self, self.h5path)
+        idialog.exec_()
+        oldselection=self.geth5selectionpath(liststyle=True, removeformatting=False)
+        h5file=h5py.File(self.h5path, mode='r')
+        fillh5tree(self.treeWidget, h5file, selectionpathlist=oldselection)
+        h5file.close()
+        
 
     @pyqtSignature("")
     def on_action_plotraw_triggered(self):

@@ -47,6 +47,17 @@ def mygetopenfile(parent=None, xpath="%s" % os.getcwd(),markstr='', filename='' 
         return returnfn
     return unicode(QFileDialog.getOpenFileName(parent,''.join(['Select file to open: ', markstr]),os.path.join(xpath, filename).replace('\\','/')))
 
+def mygetopenfiles(parent=None, xpath="%s" % os.getcwd(),markstr='', filename='' ):
+    if parent is None:
+        xapp = QApplication(sys.argv)
+        xparent = QWidget()
+        returnfns=QFileDialog.getOpenFileNames(xparent,''.join(['Select file to open:', markstr]),os.path.join(xpath, filename).replace('\\','/'))
+        xparent.destroy()
+        xapp.quit()
+    else:
+        returnfns=QFileDialog.getOpenFileNames(parent,''.join(['Select file to open: ', markstr]),os.path.join(xpath, filename).replace('\\','/'))
+    return [str(s) for s in returnfns]
+
 def mygetsavefile(parent=None, xpath="%s" % os.getcwd(),markstr='', filename='' ):
     if parent is None:
         xapp = QApplication(sys.argv)
@@ -1070,10 +1081,10 @@ def editattrs(parent, h5path, path):
             h5file[path].attrs[k]=v
         h5file.close()
 
-def get25pylabaxes(horizslowaxis=True, oneontop=True, oneonleft=True):
+def get25pylabaxes(horizslowaxis=True, oneontop=True, oneonleft=True, figsize=(9., 9.)):
 
     
-    pylab.figure(figsize=(9., 9.))
+    pylab.figure(figsize=figsize)
     fig=pylab.gcf()
 
 #    xstart=list(numpy.linspace(0, 1., 5))*5
@@ -1750,3 +1761,161 @@ class rescal_ExtraptoToDialog(QDialog):
                 self.pardict[k]=sb.value()
         self.pardict['inds_calcregion']=tuple(nokeyvals)
 
+class TwoPointResTableDialog(QDialog):
+    def __init__(self, parent, h5path):
+        super(TwoPointResTableDialog, self).__init__(parent)
+        self.h5path=h5path
+        self.setWindowTitle('Select pinout and enter resistances')
+        mainlayout=QGridLayout()
+    
+        namL=QLabel()
+        namL.setText('save name')
+        pinL=QLabel()
+        pinL.setText('select pinout')
+        
+        self.namLE=QLineEdit()
+        self.namLE.setText('PreCondition2PointRes')
+        
+        self.pinCB=QComboBox()
+        self.pinCB.clear()
+        for i, (k, v) in enumerate(PinoutLibrary.iteritems()):
+            self.pinCB.insertItem(i, k)
+        self.pinCB.setCurrentIndex(0)
+        
+            
+        mainlayout.addWidget(namL, 0, 0, 1, 2)
+        mainlayout.addWidget(self.namLE, 0, 2, 1, 3)
+        
+        mainlayout.addWidget(pinL, 1, 0, 1, 2)
+        mainlayout.addWidget(self.pinCB, 1, 2, 1, 3)
+        
+        cellL=QLabel()
+        cellL.setText('cell')
+        l0=QLabel()
+        l0.setText('I,I pads')
+        l1=QLabel()
+        l1.setText('I,I R(Ohms)')
+        l2=QLabel()
+        l2.setText('V,V pads')
+        l3=QLabel()
+        l3.setText('V,V R(Ohms)')
+        
+        mainlayout.addWidget(cellL, 2, 0)
+        mainlayout.addWidget(l0, 2, 1)
+        mainlayout.addWidget(l1, 2, 2)
+        mainlayout.addWidget(l2, 2, 3)
+        mainlayout.addWidget(l3, 2, 4)
+        
+        self.secdervalSpinBox=QDoubleSpinBox()
+        self.secdervalSpinBox.setDecimals(1)
+        self.secdervalSpinBox.setValue(-1)
+
+    
+        rowoff=3
+        self.iLabelList=[]
+        self.vLabelList=[]
+        self.iSpinBoxList=[]
+        self.vSpinBoxList=[]
+        for i, j in zip(range(rowoff, rowoff+25), range(1, 26)):
+            isb=QDoubleSpinBox()
+            isb.setDecimals(1)
+            isb.setRange(-1, 100000)
+            isb.setValue(-1)
+            vsb=QDoubleSpinBox()
+            vsb.setDecimals(1)
+            vsb.setRange(-1, 100000)
+            vsb.setValue(-1)
+            self.iSpinBoxList+=[isb]
+            self.vSpinBoxList+=[vsb]
+            cl=QLabel()
+            cl.setText(`j`)
+            il=QLabel()
+            vl=QLabel()
+            self.iLabelList+=[il]
+            self.vLabelList+=[vl]
+            mainlayout.addWidget(cl, i, 0)
+            mainlayout.addWidget(il, i, 1)
+            mainlayout.addWidget(isb, i, 2)
+            mainlayout.addWidget(vl, i, 3)
+            mainlayout.addWidget(vsb, i, 4)
+        self.filllabels()
+        
+        QObject.connect(self.pinCB,SIGNAL("activated(QString)"),self.filllabels)
+        
+        readsavedButton=QPushButton()
+        readsavedButton.setText("read saved\nresistances")
+        QObject.connect(readsavedButton, SIGNAL("pressed()"), self.readsavedvalues)
+        mainlayout.addWidget(readsavedButton, i+1, 0, 1, 2)
+        
+        self.buttonBox = QDialogButtonBox(self)
+        self.buttonBox.setGeometry(QRect(520, 195, 160, 26))
+        self.buttonBox.setOrientation(Qt.Horizontal)
+        self.buttonBox.setStandardButtons(QDialogButtonBox.Cancel|QDialogButtonBox.Ok)
+        QObject.connect(self.buttonBox, SIGNAL("accepted()"), self.accept)
+        QObject.connect(self.buttonBox, SIGNAL("rejected()"), self.reject)
+        mainlayout.addWidget(self.buttonBox, i+1, 2, 1, 3)
+         
+        QObject.connect(self.buttonBox,SIGNAL("accepted()"),self.ExitRoutine)
+        
+        self.setLayout(mainlayout)
+        QMetaObject.connectSlotsByName(self)
+        
+    def ExitRoutine(self):
+        arr=[]
+        for isb, vsb in zip(self.iSpinBoxList, self.vSpinBoxList):
+            arr+=[[isb.value(), vsb.value()]]
+        self.resarr=numpy.float32(arr)
+        savetwopointres(self.h5path, self.resarr, str(self.namLE.text()))
+    def filllabels(self):
+        k=str(self.pinCB.currentText())
+        arr=PinoutLibrary[k]
+        for il, vl, (ia, va) in zip(self.iLabelList,  self.vLabelList, arr):
+            il.setText('%d,%d' %tuple(ia))
+            vl.setText('%d,%d' %tuple(va))
+    def readsavedvalues(self):
+        nam_resarrlist=readtwopointres(self.h5path)
+        if len(nam_resarrlist)==0:
+            print 'no saved 2-point resistance arrays found'
+            return
+        elif len(nam_resarrlist)==1:
+            nam, resarr=nam_resarrlist[0]
+        else:
+            naml=[nam for nam, resarr in nam_resarrlist]
+            idialog=selectorDialog(self, naml, 'select saved 2point  res array')
+            if not idialog.exec_():
+                return
+            nam=idialog.name
+            resarr=nam_resarrlist[naml.index(nam)][1]
+        self.namLE.setText(nam)
+        for ra, isb, vsb in zip(resarr, self.iSpinBoxList, self.vSpinBoxList):
+            isb.setValue(ra[0])
+            vsb.setValue(ra[1])
+
+PinoutLibrary={\
+'xiaodong2010':numpy.array(\
+[[[1,4],[2,3]],\
+[[4,7],[5,6]],\
+[[10,13],[11,12]],\
+[[18,21],[19,20]],\
+[[21,25],[22,24]],\
+[[93,97],[94,95]],\
+[[97,100],[98,99]],\
+[[14,17],[15,16]],\
+[[28,31],[29,30]],\
+[[31,34],[32,33]],\
+[[87,89],[86,88]],\
+[[89,91],[90,92]],\
+[[8,58],[9,59]],\
+[[8,17],[15,16]],\
+[[28,31],[29,30]],\
+[[80,82],[79,81]],\
+[[82,85],[83,84]],\
+[[64,66],[65,67]],\
+[[42,47],[43,48]],\
+[[45,47],[46,48]],\
+[[71,74],[72,75]],\
+[[68,71],[69,70]],\
+[[61,64],[62,63]],\
+[[52,58],[55,57]],\
+[[49,52],[50,51]]])\
+}

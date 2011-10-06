@@ -8,6 +8,11 @@ from PnSC_ui import *
 from PnSC_math import *
 from PnSC_h5io import *
 
+def getemptybatchattrdict():
+    batchattrdict={}
+    for k in ['grpname', 'protname','path','durSpinBox','nnoiseSpinBox', 'naboveSpinBox', 'nsigSpinBox', 'firstderptsSpinBox','secderptsSpinBox','secdervalSpinBox','savegrpname']:
+        batchattrdict[k]=None
+    return batchattrdict
 def FileImport(parent, protocolname, batchattrdict=None):
     if 'PatDAQ' in protocolname:
         fn='.dat'
@@ -178,8 +183,7 @@ def JimDAQ2011_acSC(parent, filepath, batchattrdict=None):
     d['CELLNUMBER']=JimDAQ_getcell(filepath)
     return d, ds, [[], []]
 
-
-
+    
 def JimDAQ2011_translateheader(d):
     dummyfcn=lambda x:x
     key_headerkey_fcn_dflt=[\
@@ -219,6 +223,126 @@ def JimDAQ2011_fileiterator(filepath):#filepath is a .dat file from any cycle
             dlist+=[t1]
             arrlist+=[t2]
     return dlist, arrlist
+
+def CHESSDAQ2011(parent, filepath, batchattrdict=None):
+    dlist, arrlist=CHESSDAQ2011_fileiterator(filepath)
+    arr=truncate_arrlist_shortest(arrlist)
+    print arr.shape
+    d=CHESSDAQ2011_translateheader(dlist[0])
+    d['ncycles']=len(dlist)
+    ds={}
+    ds['samplecurrent']=({'Aunit':0.001}, arr[:, 0, :])
+    ds['samplevoltage']=({'Vunit':0.001}, arr[:, 1, :])
+    if arr.shape[1]==3:
+        ds['samplefilteredvoltage']=({'Vunit':0.001}, arr[:, 2, :])
+        if not 'pts_sincycle' in d.keys():
+            d['pts_sincycle']=30.
+    d['CELLNUMBER']=JimDAQ_getcell(filepath)
+    return d, ds, [[], []]
+
+def readdat_CHESSDAQ2011(path, startofheader=':header_start:', endofheader=':header_end:\r\n', startofdata=':data_begin:', endofdata=':data_end:\r\n'): 
+    #read all keyword attributes and any in the comments section
+    f=open(path, 'rb')
+    bdata=f.read()
+    f.close()
+    headstr, garb, datasection=bdata.partition(endofheader)
+
+    
+    
+    def attemptnumericconversion(s):
+        if (s.replace('.', '', 1).replace('e', '', 1).replace('+', '', 1).replace('-', '', 1)).isalnum():
+            try:
+                return eval(s)
+            except:
+                pass
+        return s
+    garb, garb, headstr=headstr.partition(startofheader)    
+    d={}
+    while len(headstr)>0:
+        a, garb, headstr=headstr.partition('\n')
+        a=a.strip()
+        if a.startswith(':'):
+            b, garb, c=a[1:].partition(':')
+            d[b]=attemptnumericconversion(c.strip())
+        if a.startswith(':coms:'):
+            b, garb, c=a[1:].partition(':')
+            i=0
+            while i<len(c)-1:
+                j=c.find(':', i)
+                k=c.find(':', i+j+1)
+                if j<0 or k<0:
+                    break
+                i=c.find(':', k+1)
+                if i<0:
+                    i=len(c)-1
+                d[c[j+1:k]]=attemptnumericconversion((c[k+1:i]).strip())
+    fullscalelist=listeval(d['fullscale_fields'])
+    rangelist=listeval(d['NIai_mVrange'])
+    nchan=len(fullscalelist)
+
+    datastr, garb, datasection=datasection.partition(endofdata)
+    if len(datastr)%nchan>0:
+        datastr=datastr[:-1*(len(datastr)%nchan)]
+    z=[struct.unpack('>f',datastr[i:i+4]) for i in range(0,len(datastr),4)] # '>d' is big-endian double float, Labview uses big-endian
+    z=numpy.reshape(numpy.float32(z), nchan, (len(z)//nchan))
+    
+    z=numpy.float32([za/(rng*0.001)*fs for za, fs, rng in z, fullscalelist, rangelist])
+    return d, z
+
+def listeval(c):
+    returnlist=[]
+    if '\t' in c:
+        delim='\t'
+    else:
+        delim=' '
+    while len(c)>0:
+        a, garb, c=c.partition(delim)
+        a=a.strip()
+        c=c.strip()
+        a=a.lstrip('0').rstrip('.')
+        a=(a=='' and (0,) or (eval(a),))[0]
+        returnlist+=[a]
+    return returnlist
+    
+def CHESSDAQ2011_translateheader(d):
+    dummyfcn=lambda x:x
+    key_headerkey_fcn_dflt=[\
+    ('operator', 'name', dummyfcn,''),\
+    ('epoch', 'date', lambda c:time.mktime(time.strptime(c.strip(),'%a, %m/%d/%Y %I:%M:%S %p')), 0), \
+    ('ambient_atmosphere', 'atmosphere', dummyfcn, 'vacuum'),\
+    ('pts_sincycle', 'writepts_sincycle', lambda n: n*d['daqHz']/d['writeHz']), \
+    ]
+    for k, hk, f, dflt in key_headerkey_fcn_dflt:
+        if hk in d.keys():
+            temp=d[hk]
+            del d[hk]
+            d[k]=f(temp)
+        else:
+            d[k]=dflt
+    return d
+    
+def CHESSDAQ2011_fileiterator(filepath):#filepath is a .dat file from any cycle
+    folderpath, filename=os.path.split(filepath)
+    a, c=os.path.splitext(filename)
+    a, b, n=a.rpartition('_of_')
+    a, atemp, i=a.rpartition('_')
+    a+=atemp
+    i=eval(i)
+    n=eval(n)
+    
+    filelist=os.listdir(folderpath)
+    dlist=[]
+    arrlist=[]
+    for cnum in range(1, n+1):
+        fn='%s%d%s%d%s' %(a, cnum, b, n, c)
+        if fn in filelist:
+            p=os.path.join(folderpath, fn)
+            print 'reading: ', p
+            t1, t2=readdat_CHESSDAQ2011(p)
+            dlist+=[t1]
+            arrlist+=[t2]
+    return dlist, arrlist
+    
 
 def uint16tofloat32(x, offsetbinary=True, posfullscale=1.):#a negative posfullscale value will invert
     if not offsetbinary:
@@ -518,6 +642,7 @@ def PatDAQ2011_SC(parent, filepath, batchattrdict=None):
     return d, ds, SegmentData
     
 FileFormatFunctionLibrary={\
+                    'CHESSDAQ2011':CHESSDAQ2011, \
                     'JimDAQ2011_acSC':JimDAQ2011_acSC, \
                    'PatDAQ_SC':PatDAQ_SC, \
                    'PatDAQ2011_SC':PatDAQ2011_SC, \

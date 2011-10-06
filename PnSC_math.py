@@ -336,14 +336,24 @@ def tcr(r1, r2, t1, t2):#either all a
         ratio=max(r1, r2)/min(r1, r2)
     return (ratio-1.)/numpy.abs(t2-t1)
 
+def makearr_cyc(x, calcarr):
+    if isinstance(x, numpy.ndarray):
+        if len(x)==calcarr.shape[0]:
+            return x
+        else:
+            return numpy.array([x[0]]*calcarr.shape[0])
+    else:
+        return numpy.array([x]*calcarr.shape[0])
+
 def temp_res(R, R0, T0, alpha):
-    return (R/R0-1.)/alpha+T0
+    print '$%^', R0
+    return numpy.array([(Rv/R0v-1.)/alphav+T0v for Rv, R0v, T0v, alphav in zip(R, makearr_cyc(R0, R), makearr_cyc(T0, R), makearr_cyc(alpha, R))])
 
 def dT_IVdIdV(I, V, dI, dV, R0, alpha):
-    return (I*dV-V*dI)/alpha/R0/I**2
+    return numpy.array([(Iv*dVv-Vv*dIv)/alphav/R0v/Iv**2 for Iv, Vv, dIv, dVv, R0v, alphav in zip(I, V, dI, dV, makearr_cyc(R0, I), makearr_cyc(alpha, I))])
 
 def D_IVdIdV(I, V, dI, dV, R0, alpha):
-    return V*I**3*R0*alpha/(I*dV-V*dI)
+    return numpy.array([Vv*Iv**3*R0v*alphav/(Iv*dVv-Vv*dIv) for Iv, Vv, dIv, dVv, R0v, alphav in zip(I, V, dI, dV, makearr_cyc(R0, I), makearr_cyc(alpha, I))])
     
 def replacevalswithneighsin2nddim(arr, inds):
     iall, jall=inds
