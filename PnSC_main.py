@@ -114,6 +114,7 @@ class MainMenu(QMainWindow):
         self.action_importscdata=MainMenuQAction(self,'action_importscdata', 'import calorimetry data', self.menufileio, [('h5open', [True])], self.ActionDict)
         self.action_batchimportscdata=MainMenuQAction(self,'action_batchimportscdata', 'batch import calorimetry data setup', self.menufileio, [('h5open', [True])], self.ActionDict)
         self.action_batchimportdatafixedmsma=MainMenuQAction(self,'action_batchimportdatafixedmsma', 'batch import calorimetry data using segment info from selected HeatProgram', self.menufileio, [('h5open', [True]), ('selectiongrouptype', ['heatprogram'])], self.ActionDict)
+        self.action_batchimportdatadfltmsma=MainMenuQAction(self,'action_batchimportdatadfltmsma', 'batch import calorimetry data with no segment info', self.menufileio, [('h5open', [True])], self.ActionDict)
         self.action_createh5=MainMenuQAction(self,'action_createh5', 'new h5 file', self.menufileio, [], self.ActionDict)
         self.action_createexpgrp=MainMenuQAction(self,'action_createexpgrp', 'new experiment group', self.menufileio, [('h5open', [True])], self.ActionDict)
         self.action_delh5grp=MainMenuQAction(self,'action_delh5grp', 'DELETE selected group', self.menufileio, [('h5open', [True]), ('selectiontype', ['Group'])], self.ActionDict)
@@ -383,7 +384,7 @@ class MainMenu(QMainWindow):
         batchattrdict=getemptybatchattrdict()
         batchattrdict['grpname']=h5expname
         batchattrdict['protname']=protname
-        plist=mygetopenfiles(parent=self, xpath=os.path.split(self.h5path)[0], markstr='Slsect ONE data file for each experiment to be imported', filename='.h5' )
+        plist=mygetopenfiles(parent=self, xpath=os.path.split(self.h5path)[0], markstr='Select ONE data file for each experiment to be imported', filename='.h5' )
         for p in plist:
             batchattrdict['path']=p
         
@@ -392,6 +393,44 @@ class MainMenu(QMainWindow):
             if not ans:
                 continue
             AttrDict, DataSetDict, SegmentData=ans
+            grpname=os.path.splitext(os.path.split(AttrDict['importpath'])[1])[0]
+            writenewh5heatprogram(self.h5path, h5expname, grpname, AttrDict, DataSetDict, (segms, segmA))        
+            
+        h5file=h5py.File(self.h5path, mode='r')
+        fillh5tree(self.treeWidget, h5file, selectionpathlist=oldselection)
+        h5file.close()
+
+    @pyqtSignature("")
+    def on_action_batchimportdatadfltmsma_triggered(self):
+        oldselection=self.geth5selectionpath(liststyle=True, removeformatting=False)
+        #pathlist=self.geth5selectionpath(liststyle=True)
+        h5file=h5py.File(self.h5path, mode='r')
+        sgd=selectgroupDialog(self, h5file['Calorimetry'], title='Select h5 experiment group for import')
+        if not sgd:
+            h5file.close()
+            return
+        h5file.close()
+        h5expname=sgd.grpname
+        idialog=selectorDialog(self, FileFormatFunctionLibrary.keys(), title='Select data import protocol')
+        if not idialog.exec_():
+            return
+        protname=idialog.name
+        batchattrdict=getemptybatchattrdict()
+        batchattrdict['grpname']=h5expname
+        batchattrdict['protname']=protname
+        plist=mygetopenfiles(parent=self, xpath=os.path.split(self.h5path)[0], markstr='Select ONE data file for each experiment to be imported', filename='.h5' )
+        for p in plist:
+            batchattrdict['path']=p
+        
+            ans=FileImport(self, protname, batchattrdict=batchattrdict)
+            #print ans
+            if not ans:
+                continue
+            AttrDict, DataSetDict, SegmentData=ans
+            mA=DataSetDict['samplecurrent'][1][0]*DataSetDict['samplecurrent'][0]['Aunit']*1000.
+            ms=1000.*numpy.float32(range(len(mA)))/AttrDict['daqHz']
+            segms=[0., ms[-1]]
+            segmA=[0., 0.]
             grpname=os.path.splitext(os.path.split(AttrDict['importpath'])[1])[0]
             writenewh5heatprogram(self.h5path, h5expname, grpname, AttrDict, DataSetDict, (segms, segmA))        
             
@@ -416,6 +455,7 @@ class MainMenu(QMainWindow):
             h5expname=sgd.grpname
             idialog=selectorDialog(self, FileFormatFunctionLibrary.keys(), title='Select data import protocol')
             if not idialog.exec_():
+                
                 return
             protname=idialog.name
         else:

@@ -369,7 +369,7 @@ class SegmentCyclePlot(QDialog):
 #        self.setLayout(mainlayout)
 
 class SegmentEditor(QDialog):
-    def __init__(self, parent, SegmentData, cycledata, maxpts=9, markersize=2):
+    def __init__(self, parent, SegmentData, cycledata, maxpts=15, markersize=2):
         super(SegmentEditor, self).__init__(parent)
 
         self.setWindowTitle('Provide the endpoint of segments in a single cycle')
@@ -1906,13 +1906,13 @@ PinoutLibrary={\
 [[87,89],[86,88]],\
 [[89,91],[90,92]],\
 [[8,58],[9,59]],\
-[[8,17],[15,16]],\
-[[28,31],[29,30]],\
+[[35, 37],[36, 41]],\
+[[37, 39],[38, 40]],\
 [[80,82],[79,81]],\
 [[82,85],[83,84]],\
 [[64,66],[65,67]],\
 [[42,47],[43,48]],\
-[[45,47],[46,48]],\
+[[45,47],[44,46]],\
 [[71,74],[72,75]],\
 [[68,71],[69,70]],\
 [[61,64],[62,63]],\

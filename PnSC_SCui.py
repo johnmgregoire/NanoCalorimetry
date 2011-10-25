@@ -633,6 +633,7 @@ class SCrecipeDialog(QDialog):
                 'SGnpts':3, \
                 'SGorder':1, \
                 'SGderiv':deriv, \
+                'SGbin':0, \
                 }
     
     def griddatafilterdflt(self):

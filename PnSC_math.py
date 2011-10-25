@@ -14,7 +14,11 @@ from PnSC_ui import *
 #        arr=numpy.array([(((numpy.append(arr[i0:i], arr[i+1:i1]).mean()-arr[i]))**2<(numpy.append(arr[i0:i], arr[i+1:i1]).std()*nsig)**2 and (arr[i],) or (numpy.append(arr[i0:i], arr[i+1:i1]).mean(),))[0] for i, i0, i1 in zip(range(len(arr)), starti, stopi)], dtype=arr.dtype)
 #    return arr
     
-def savgolsmooth(x, nptsoneside=7, order = 4, dx=1.0, deriv=0): #based on scipy cookbook. x is 1-d array, window is the number of points used to smooth the data, order is the order of the smoothing polynomial, will return the smoothed "deriv"th derivative of x
+def savgolsmooth(x, nptsoneside=7, order = 4, dx=1.0, deriv=0, binprior=0): #based on scipy cookbook. x is 1-d array, window is the number of points used to smooth the data, order is the order of the smoothing polynomial, will return the smoothed "deriv"th derivative of x
+    if binprior>1:
+        origlen=len(x)
+        x=numpy.array([x[i*binprior:(i+1)*binprior].mean() for i in range(origlen//binprior)])
+    
     side=numpy.uint16(max(nptsoneside, numpy.ceil(order/2.)))
     s=numpy.r_[2*x[0]-x[side:0:-1],x,2*x[-1]-x[-2:-1*side-2:-1]]
     # a second order polynomal has 3 coefficients
@@ -27,6 +31,14 @@ def savgolsmooth(x, nptsoneside=7, order = 4, dx=1.0, deriv=0): #based on scipy 
 
     smooth_data=[numpy.array([(weight * s[i + offset]) for offset, weight in offset_data]).sum() for i in xrange(side, len(s) - side)]
     smooth_data=numpy.array(smooth_data)/(dx**deriv)
+    
+    if binprior>1:    
+        ia=numpy.arange(binprior, dtype='float32')/binprior
+        xr=numpy.concatenate([ia*(b-a)+b for a, b in zip(smooth_data[:-1], smooth_data[1:])])
+        xr=numpy.concatenate([(smooth_data[1]-smooth_data[0])*ia[:binprior//2]+smooth_data[0], xr, (smooth_data[-1]-smooth_data[-2])*ia[:binprior//2]+smooth_data[-1]])
+        smooth_data=numpy.concatenate([xr, (smooth_data[-1]-smooth_data[-2])*ia[:origlen-len(xr)]+smooth_data[-1]])
+
+
     return smooth_data
 
 class fitfcns: #datatuples are x1,x2,...,y
@@ -459,15 +471,16 @@ def windowfft_ampphase(x, npts_win, pad=True, ptspercyc=None):
 def performgenericfilter(arr, filterdict):#filterdict can contains unused key:val but it must contain all those necessary for a given filter step to be performed
     arr=copy.copy(arr)
     fcn_parname_fkey_eachcycle=[\
-    (removeoutliers_meanstd, ['nptsoneside', 'nsig', 'gapptsoneside'], ['OLnpts', 'OLnsig', 'OLgappts'], True), \
-    (savgolsmooth, ['nptsoneside', 'order', 'deriv'], ['SGnpts', 'SGorder', 'SGderiv'], True), \
+    (removeoutliers_meanstd, ['nptsoneside', 'nsig', 'gapptsoneside'], ['OLnpts', 'OLnsig', 'OLgappts'], [], [], True), \
+    (savgolsmooth, ['nptsoneside', 'order', 'deriv'], ['SGnpts', 'SGorder', 'SGderiv'], ['binprior'], ['SGbin'], True), \
     #(timeintegrate, ['integwindow_s'], ['integwindow_s'], True)\
 #    (timepartition, ['timepartitionfcn', 'piecelist', 'yvals'], ['timepartitionfcn', 'fitpars', 'yvals'], False)
     ]
-    for f, nl, kl, eachcycle in fcn_parname_fkey_eachcycle:
+    for f, nl, kl, nlopt, klopt, eachcycle in fcn_parname_fkey_eachcycle:
         parlist=[((not k in filterdict) or filterdict[k] is None) or (n, filterdict[k]) for n, k in zip(nl, kl)] 
         if True in parlist:
             continue
+        parlist+=[(n, filterdict[k]) for n, k in zip(nlopt, klopt) if (k in filterdict and not filterdict[k] is None)] 
         print 'executing filter function ', f.func_name, dict(parlist)
         print arr.shape
         if eachcycle:
