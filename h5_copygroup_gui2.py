@@ -106,7 +106,20 @@ class MainMenu(QMainWindow):
         self.action_editattrs=MainMenuQAction(self,'action_editattrs', 'Edit import attrs (select a heat program)', self.menufileio, [('h5open', [True]), ('selectiongrouptype', ['heatprogram'])], self.ActionDict)
         self.action_copynode=MainMenuQAction(self,'action_copynode', 'Copy read-only selected group or dataset to selected group', self.menufileio, [('h5open', [True]), ('selectiontype', ['Group', 'File']), ('readh5selectiontype', ['Group', 'Dataset'])], self.ActionDict)
         self.action_copygroup=MainMenuQAction(self,'action_copygroup', 'Copy contents of read-only selected group to selected group', self.menufileio, [('h5open', [True]), ('selectiontype', ['Group', 'File']), ('readh5selectiontype', ['Group'])], self.ActionDict)
-  
+
+        #setup a menu section
+        self.menuplot = QMenu(self.main_menu_pulldown)
+        self.menuplot.setObjectName("menuplot")
+        self.menuplot.setTitle('Visualization')
+        self.main_menu_pulldown.addAction(self.menuplot.menuAction())
+        #end of menu head
+        
+        #setup a menu item in a menu section.   
+        self.action_plotraw=MainMenuQAction(self,'action_plotraw', 'plot Dataset values (select dataset)', self.menuplot, [('h5open', [True]), ('selectiontype', ['Dataset'])], self.ActionDict)
+        self.action_printdata=MainMenuQAction(self,'action_printdata', 'print Dataset values (select dataset or attribute)', self.menuplot, [('h5open', [True]), ('selectiontype', ['Dataset', 'Attr'])], self.ActionDict)
+        self.action_plotmetadata=MainMenuQAction(self,'action_plotmetadata', 'Plot Heat Program MetaData(select heat program)', self.menuplot, [('h5open', [True]), ('selectiongrouptype', ['heatprogram'])], self.ActionDict)
+
+        
         self.setMenuBar(self.main_menu_pulldown)
         QMetaObject.connectSlotsByName(self)
     
@@ -266,8 +279,47 @@ class MainMenu(QMainWindow):
         h5file=h5py.File(self.h5path, mode='r')
         fillh5tree(self.treeWidget, h5file, hpsortattr=str(self.sortattrLineEdit.text()))
         h5file.close()
-       
-       
+
+    @pyqtSignature("")  
+    def on_action_plotraw_triggered(self):
+        h5file=h5py.File(self.h5path, mode='r')
+        path=self.geth5selectionpath()
+        self.data=readh5pyarray(h5file[path])
+        h5file.close()
+        if self.data.ndim==1:
+            idialog=simpleplotDialog(self, self.data)
+        else:
+            plotdata=self.data.swapaxes(self.data.ndim-1,numpy.argmax(self.data.shape))#assume plot should be vs the longest dimmension
+            plotdata=[plotdata[ind] for ind in numpy.ndindex(*plotdata.shape[:-1])]
+            idialog=simpleplotDialog(self, plotdata)
+        idialog.exec_()
+    
+    @pyqtSignature("")
+    def on_action_plotmetadata_triggered(self):
+        fcndict=heatprogrammetadatafcns
+        idialog=selectorDialog(self, fcndict.keys(), title='select type of metadata to plot')
+        if not idialog.exec_():
+            return
+        fcn=fcndict[idialog.name]
+        
+        pathlist=self.geth5selectionpath(liststyle=True)
+        self.data=fcn(self.h5path, pathlist[1], pathlist[4])
+        idialog=simpleplotDialog(self, self.data[1], xdata=self.data[0])
+        idialog.exec_()
+
+    @pyqtSignature("")
+    def on_action_printdata_triggered(self):    
+        h5file=h5py.File(self.h5path, mode='r')
+        if self.statusdict['selectiontype']=='Attr':
+            path, attrname=self.geth5selectionpath()
+            self.data=h5file[path].attrs[attrname]
+            print attrname, ': ', self.data
+        elif self.statusdict['selectiontype']=='Dataset':
+            path=self.geth5selectionpath()
+            self.data=readh5pyarray(h5file[path])
+            print path.rpartition('/')[2], ': ', self.data
+        h5file.close()
+        
     @pyqtSignature("")
     def on_action_editattrs_triggered(self):
         path=self.geth5selectionpath(liststyle=False)
@@ -276,10 +328,9 @@ class MainMenu(QMainWindow):
     @pyqtSignature("")
     def on_action_delh5grp_triggered(self):
         h5file=h5py.File(self.h5path, mode='r+')
-        del h5file[self.geth5selectionpath(liststyle=False)]
-        h5file.close()
-        h5file=h5py.File(self.h5path, mode='r')
-        fillh5tree(self.treeWidget, h5file, hpsortattr=str(self.sortattrLineEdit.text()))
+        h5p=self.geth5selectionpath(liststyle=False)
+        if h5p in h5file:
+            del h5file[h5p]
         h5file.close()
         
     @pyqtSignature("")
@@ -331,9 +382,6 @@ class MainMenu(QMainWindow):
         if not samepaths:
             readh5file.close()
         h5file.close()
-        h5file=h5py.File(self.h5path, mode='r')
-        fillh5tree(self.treeWidget, h5file, hpsortattr=str(self.sortattrLineEdit.text()))
-        h5file.close()
 
     @pyqtSignature("")
     def on_action_copygroup_triggered(self):
@@ -355,9 +403,6 @@ class MainMenu(QMainWindow):
 
         if not samepaths:
             readh5file.close()
-        h5file.close()
-        h5file=h5py.File(self.h5path, mode='r')
-        fillh5tree(self.treeWidget, h5file, hpsortattr=str(self.sortattrLineEdit.text()))
         h5file.close()
 
     def autocopyspec(self):

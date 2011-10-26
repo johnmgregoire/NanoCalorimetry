@@ -144,7 +144,10 @@ class fillh5tree():
                 else:
                     s+=attrval
             elif isinstance(attrval, int) or isinstance(attrval, float):
-                s+=self.numfmt(attrval)
+                if attrname=='epoch' or attrname=='Epoch':
+                    s+='%.3f' %attrval
+                else:
+                    s+=self.numfmt(attrval)
             elif isinstance(attrval, list) or isinstance(attrval, numpy.ndarray):
                 temp=attrval
                 temp2=attrval
