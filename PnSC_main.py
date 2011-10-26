@@ -84,6 +84,9 @@ class MainMenu(QMainWindow):
         self.expandexceptPushButton.setGeometry(QRect(410, 550, 200, 25))
         self.expandexceptPushButton.setText('Expand Groups')
         QObject.connect(self.expandexceptPushButton, SIGNAL("pressed()"), self.expandgrouptree)
+        self.sortattrLineEdit = QLineEdit(self.bodywidget)
+        self.sortattrLineEdit.setGeometry(QRect(610, 550, 200, 25))
+        self.sortattrLineEdit.setText('epoch')
         
         if previousmm is None:
             self.on_action_openh5_triggered()
@@ -91,7 +94,7 @@ class MainMenu(QMainWindow):
             oldselection=mm.geth5selectionpath(liststyle=True, removeformatting=False)
             self.h5path=previousmm.h5path
             h5file=h5py.File(self.h5path, mode='r')
-            fillh5tree(self.treeWidget, h5file, selectionpathlist=oldselection)
+            fillh5tree(self.treeWidget, h5file, selectionpathlist=oldselection, hpsortattr=str(self.sortattrLineEdit.text()))
             h5file.close()
             self.statusdict['h5open']=True
             self.actionenable()
@@ -177,7 +180,7 @@ class MainMenu(QMainWindow):
     def redraw(self):
         if os.path.exists(self.h5path) and self.h5path.endswith('.h5'):
             h5file=h5py.File(self.h5path, mode='r')
-            fillh5tree(self.treeWidget, h5file)
+            fillh5tree(self.treeWidget, h5file, hpsortattr=str(self.sortattrLineEdit.text()))
             h5file.close()
             self.statusdict['h5open']=True
             self.actionenable()
@@ -284,7 +287,7 @@ class MainMenu(QMainWindow):
         self.h5path=str(temp)
         createh5file(self.h5path)
         h5file=h5py.File(self.h5path, mode='r')
-        fillh5tree(self.treeWidget, h5file)
+        fillh5tree(self.treeWidget, h5file, hpsortattr=str(self.sortattrLineEdit.text()))
         h5file.close()
         self.statusdict['h5open']=True
         self.actionenable()
@@ -298,7 +301,7 @@ class MainMenu(QMainWindow):
             return
         self.h5path=str(temp)
         h5file=h5py.File(self.h5path, mode='r')
-        fillh5tree(self.treeWidget, h5file)
+        fillh5tree(self.treeWidget, h5file, hpsortattr=str(self.sortattrLineEdit.text()))
         h5file.close()
         self.statusdict['h5open']=True
         self.actionenable()
@@ -318,7 +321,7 @@ class MainMenu(QMainWindow):
         h5file.close()
         create_exp_grp(self.h5path, h5expname)
         h5file=h5py.File(self.h5path, mode='r')
-        fillh5tree(self.treeWidget, h5file)
+        fillh5tree(self.treeWidget, h5file, hpsortattr=str(self.sortattrLineEdit.text()))
         h5file.close()
        
        
@@ -333,7 +336,7 @@ class MainMenu(QMainWindow):
         del h5file[self.geth5selectionpath(liststyle=False)]
         h5file.close()
         h5file=h5py.File(self.h5path, mode='r')
-        fillh5tree(self.treeWidget, h5file)
+        fillh5tree(self.treeWidget, h5file, hpsortattr=str(self.sortattrLineEdit.text()))
         h5file.close()
         
     @pyqtSignature("")
@@ -346,7 +349,7 @@ class MainMenu(QMainWindow):
         del h5file[idialog.grp.name]
         h5file.close()
         h5file=h5py.File(self.h5path, mode='r')
-        fillh5tree(self.treeWidget, h5file)
+        fillh5tree(self.treeWidget, h5file, hpsortattr=str(self.sortattrLineEdit.text()))
         h5file.close()
 
     def batchrun_files(self, folder, startsendswith=('', ''), skiperrors=False):
@@ -397,7 +400,7 @@ class MainMenu(QMainWindow):
             writenewh5heatprogram(self.h5path, h5expname, grpname, AttrDict, DataSetDict, (segms, segmA))        
             
         h5file=h5py.File(self.h5path, mode='r')
-        fillh5tree(self.treeWidget, h5file, selectionpathlist=oldselection)
+        fillh5tree(self.treeWidget, h5file, selectionpathlist=oldselection, hpsortattr=str(self.sortattrLineEdit.text()))
         h5file.close()
 
     @pyqtSignature("")
@@ -435,7 +438,7 @@ class MainMenu(QMainWindow):
             writenewh5heatprogram(self.h5path, h5expname, grpname, AttrDict, DataSetDict, (segms, segmA))        
             
         h5file=h5py.File(self.h5path, mode='r')
-        fillh5tree(self.treeWidget, h5file, selectionpathlist=oldselection)
+        fillh5tree(self.treeWidget, h5file, selectionpathlist=oldselection, hpsortattr=str(self.sortattrLineEdit.text()))
         h5file.close()
         
     @pyqtSignature("")
@@ -495,7 +498,7 @@ class MainMenu(QMainWindow):
         oldselection=['Calorimetry', h5expname, 'measurement', 'HeatProgram', grpname]
         
         h5file=h5py.File(self.h5path, mode='r')
-        fillh5tree(self.treeWidget, h5file, selectionpathlist=oldselection)
+        fillh5tree(self.treeWidget, h5file, selectionpathlist=oldselection, hpsortattr=str(self.sortattrLineEdit.text()))
         h5file.close()
         
     @pyqtSignature("")
@@ -540,7 +543,7 @@ class MainMenu(QMainWindow):
             writecellres(self.h5path, pathlist[1], hp, R0)
         oldselection=self.geth5selectionpath(liststyle=True, removeformatting=False)
         h5file=h5py.File(self.h5path, mode='r')
-        fillh5tree(self.treeWidget, h5file, selectionpathlist=oldselection)
+        fillh5tree(self.treeWidget, h5file, selectionpathlist=oldselection, hpsortattr=str(self.sortattrLineEdit.text()))
         h5file.close()
     
 
@@ -569,7 +572,7 @@ class MainMenu(QMainWindow):
             writecellres_calc(self.h5path, pathlist[1], hp, Ro)
         oldselection=self.geth5selectionpath(liststyle=True, removeformatting=False)
         h5file=h5py.File(self.h5path, mode='r')
-        fillh5tree(self.treeWidget, h5file, selectionpathlist=oldselection)
+        fillh5tree(self.treeWidget, h5file, selectionpathlist=oldselection, hpsortattr=str(self.sortattrLineEdit.text()))
         h5file.close()
 
     @pyqtSignature("")
@@ -601,7 +604,7 @@ class MainMenu(QMainWindow):
             writecellres_calc(self.h5path, pathlist[1], hp, R0)
         oldselection=self.geth5selectionpath(liststyle=True, removeformatting=False)
         h5file=h5py.File(self.h5path, mode='r')
-        fillh5tree(self.treeWidget, h5file, selectionpathlist=oldselection)
+        fillh5tree(self.treeWidget, h5file, selectionpathlist=oldselection, hpsortattr=str(self.sortattrLineEdit.text()))
         h5file.close()
         
     @pyqtSignature("")
@@ -610,7 +613,7 @@ class MainMenu(QMainWindow):
         idialog.exec_()
         oldselection=self.geth5selectionpath(liststyle=True, removeformatting=False)
         h5file=h5py.File(self.h5path, mode='r')
-        fillh5tree(self.treeWidget, h5file, selectionpathlist=oldselection)
+        fillh5tree(self.treeWidget, h5file, selectionpathlist=oldselection, hpsortattr=str(self.sortattrLineEdit.text()))
         h5file.close()
 
     @pyqtSignature("")
@@ -618,7 +621,7 @@ class MainMenu(QMainWindow):
         rescalpath_getorassign(self.h5path, self.statusdict['selectionname'], parent=self, forceassign=True)
         oldselection=self.geth5selectionpath(liststyle=True, removeformatting=False)
         h5file=h5py.File(self.h5path, mode='r')
-        fillh5tree(self.treeWidget, h5file, selectionpathlist=oldselection)
+        fillh5tree(self.treeWidget, h5file, selectionpathlist=oldselection, hpsortattr=str(self.sortattrLineEdit.text()))
         h5file.close()
         self.actionenable()
 
@@ -628,7 +631,7 @@ class MainMenu(QMainWindow):
         idialog.exec_()
         oldselection=self.geth5selectionpath(liststyle=True, removeformatting=False)
         h5file=h5py.File(self.h5path, mode='r')
-        fillh5tree(self.treeWidget, h5file, selectionpathlist=oldselection)
+        fillh5tree(self.treeWidget, h5file, selectionpathlist=oldselection, hpsortattr=str(self.sortattrLineEdit.text()))
         h5file.close()
         
 
@@ -710,7 +713,7 @@ class MainMenu(QMainWindow):
         del h5g[p]
         h5file.close()
         h5file=h5py.File(self.h5path, mode='r')
-        fillh5tree(self.treeWidget, h5file)
+        fillh5tree(self.treeWidget, h5file, hpsortattr=str(self.sortattrLineEdit.text()))
         h5file.close()
         self.actionenable()
         
@@ -721,7 +724,7 @@ class MainMenu(QMainWindow):
         idialog.show()
         oldselection=self.geth5selectionpath(liststyle=True, removeformatting=False)
         h5file=h5py.File(self.h5path, mode='r')
-        fillh5tree(self.treeWidget, h5file, selectionpathlist=oldselection)
+        fillh5tree(self.treeWidget, h5file, selectionpathlist=oldselection, hpsortattr=str(self.sortattrLineEdit.text()))
         h5file.close()
 
     @pyqtSignature("")
@@ -731,7 +734,7 @@ class MainMenu(QMainWindow):
         idialog.show()
         oldselection=self.geth5selectionpath(liststyle=True, removeformatting=False)
         h5file=h5py.File(self.h5path, mode='r')
-        fillh5tree(self.treeWidget, h5file, selectionpathlist=oldselection)
+        fillh5tree(self.treeWidget, h5file, selectionpathlist=oldselection, hpsortattr=str(self.sortattrLineEdit.text()))
         h5file.close()
         
     @pyqtSignature("")
@@ -741,7 +744,7 @@ class MainMenu(QMainWindow):
         idialog.show()
         oldselection=self.geth5selectionpath(liststyle=True, removeformatting=False)
         h5file=h5py.File(self.h5path, mode='r')
-        fillh5tree(self.treeWidget, h5file, selectionpathlist=oldselection)
+        fillh5tree(self.treeWidget, h5file, selectionpathlist=oldselection, hpsortattr=str(self.sortattrLineEdit.text()))
         h5file.close()
     
     @pyqtSignature("")
@@ -751,7 +754,7 @@ class MainMenu(QMainWindow):
         idialog.show()
         oldselection=self.geth5selectionpath(liststyle=True, removeformatting=False)
         h5file=h5py.File(self.h5path, mode='r')
-        fillh5tree(self.treeWidget, h5file, selectionpathlist=oldselection)
+        fillh5tree(self.treeWidget, h5file, selectionpathlist=oldselection, hpsortattr=str(self.sortattrLineEdit.text()))
         h5file.close()
         
     @pyqtSignature("")
@@ -761,7 +764,7 @@ class MainMenu(QMainWindow):
         idialog.show()
         oldselection=self.geth5selectionpath(liststyle=True, removeformatting=False)
         h5file=h5py.File(self.h5path, mode='r')
-        fillh5tree(self.treeWidget, h5file, selectionpathlist=oldselection)
+        fillh5tree(self.treeWidget, h5file, selectionpathlist=oldselection, hpsortattr=str(self.sortattrLineEdit.text()))
         h5file.close()
         
     @pyqtSignature("")
@@ -775,7 +778,7 @@ class MainMenu(QMainWindow):
         idialog.show()
         oldselection=self.geth5selectionpath(liststyle=True, removeformatting=False)
         h5file=h5py.File(self.h5path, mode='r')
-        fillh5tree(self.treeWidget, h5file, selectionpathlist=oldselection)
+        fillh5tree(self.treeWidget, h5file, selectionpathlist=oldselection, hpsortattr=str(self.sortattrLineEdit.text()))
         h5file.close()
 
 class MainMenuQAction(QAction):

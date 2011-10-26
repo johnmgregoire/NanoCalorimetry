@@ -19,6 +19,8 @@ from PnSC_math import *
 from PnSC_h5io import *
 import PnSC_h5io as io
 
+are_paths_equivalent=lambda path1, path2:os.path.normcase(os.path.abspath(path1))==os.path.normcase(os.path.abspath(path2))
+    
 class messageDialog(QDialog):
     def __init__(self, parent=None, title=''):
         super(messageDialog, self).__init__(parent)
@@ -79,12 +81,13 @@ def mygetdir(parent=None, xpath="%s" % os.getcwd(),markstr='' ):
     return unicode(QFileDialog.getExistingDirectory(parent,''.join(['Select directory:', markstr]), xpath))
 
 class fillh5tree():
-    def __init__(self, tree, h5file, showattrs=True, selectionpathlist=None):
+    def __init__(self, tree, h5file, showattrs=True, selectionpathlist=None, hpsortattr='epoch'):
         self.treeWidget=tree
         self.treeWidget.clear()
-        
         self.showattrs=showattrs
-        
+        if hpsortattr=='':
+            hpsortattr=None
+        self.hpsortattr=hpsortattr
         mainitem=QTreeWidgetItem([os.path.split(h5file.filename)[1]],  0)
         self.treeWidget.addTopLevelItem(mainitem)
         self.createTree(h5file, mainitem)
@@ -104,22 +107,33 @@ class fillh5tree():
     def createTree(self, startnode, parentitem):
         #print startnode.name
         #print startnode.listobjects()
+        sortbool=(not self.hpsortattr is None) and 'HeatProgram' in parentitem.text(0)
+        if sortbool:
+            sortvals=[]
+            items=[]
         for node in startnode.iterobjects():
             if isinstance(node, h5py.Dataset):
                 item=QTreeWidgetItem([node.name.rpartition('/')[2]+`node.shape`],  0)
-                parentitem.addChild(item)
                 if self.showattrs:
                     for attrname, attrval in node.attrs.iteritems():
                         attritem=QTreeWidgetItem([self.attrstring(attrname, attrval)],  0)
                         item.addChild(attritem)
             elif isinstance(node, h5py.Group):
                 item=QTreeWidgetItem([node.name.rpartition('/')[2]],  0)
-                parentitem.addChild(item)
                 self.createTree(node, item)
                 if self.showattrs:
                     for attrname, attrval in node.attrs.iteritems():
                         attritem=QTreeWidgetItem([self.attrstring(attrname, attrval)],  0)
                         item.addChild(attritem)
+            
+            if sortbool:
+                items+=[item]
+                sortvals+=[(self.hpsortattr in node.attrs.keys() and (node.attrs[self.hpsortattr],) or (0.,))[0]]
+            else:
+                parentitem.addChild(item)
+        if sortbool:
+            for i in numpy.argsort(sortvals):
+                parentitem.addChild(items[i])
 
     def attrstring(self, attrname, attrval):
         s="'"+attrname+"':"
@@ -213,7 +227,7 @@ class plotwidget(FigureCanvas):
 class attreditorDialog(QDialog):
     def __init__(self, parent, attrd, arr=None, title=''):
         super(attreditorDialog, self).__init__(parent)
-
+        self.edited=False
         arrbool=not arr is None
         self.setWindowTitle(title)
         self.lw=QListWidget()
@@ -1078,7 +1092,10 @@ def editattrs(parent, h5path, path):
     if repeat:
         h5file=h5py.File(h5path, mode='r+')
         for k, v in ad.iteritems():
-            h5file[path].attrs[k]=v
+            try:
+                h5file[path].attrs[k]=v
+            except:
+                print 'error in saveing key "', k, '" with value ', v
         h5file.close()
 
 def get25pylabaxes(horizslowaxis=True, oneontop=True, oneonleft=True, figsize=(9., 9.)):
