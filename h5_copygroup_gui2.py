@@ -118,6 +118,18 @@ class MainMenu(QMainWindow):
         self.action_plotraw=MainMenuQAction(self,'action_plotraw', 'plot Dataset values (select dataset)', self.menuplot, [('h5open', [True]), ('selectiontype', ['Dataset'])], self.ActionDict)
         self.action_printdata=MainMenuQAction(self,'action_printdata', 'print Dataset values (select dataset or attribute)', self.menuplot, [('h5open', [True]), ('selectiontype', ['Dataset', 'Attr'])], self.ActionDict)
         self.action_plotmetadata=MainMenuQAction(self,'action_plotmetadata', 'Plot Heat Program MetaData(select heat program)', self.menuplot, [('h5open', [True]), ('selectiongrouptype', ['heatprogram'])], self.ActionDict)
+        
+        #setup a menu section
+        self.readmenuplot = QMenu(self.main_menu_pulldown)
+        self.readmenuplot.setObjectName("readmenuplot")
+        self.readmenuplot.setTitle('read-only Visualization')
+        self.main_menu_pulldown.addAction(self.readmenuplot.menuAction())
+        #end of menu head
+        
+        #setup a menu item in a menu section.   
+        self.action_readplotraw=MainMenuQAction(self,'action_readplotraw', 'plot Dataset values (select dataset)', self.readmenuplot, [('readh5open', [True]), ('readh5selectiontype', ['Dataset'])], self.ActionDict)
+        self.action_readprintdata=MainMenuQAction(self,'action_readprintdata', 'print Dataset values (select dataset or attribute)', self.readmenuplot, [('readh5open', [True]), ('readh5selectiontype', ['Dataset', 'Attr'])], self.ActionDict)
+        #self.action_readplotmetadata=MainMenuQAction(self,'action_readplotmetadata', 'Plot Heat Program MetaData(select heat program)', self.readmenuplot, [('readh5open', [True]), ('readh5selectiongrouptype', ['heatprogram'])], self.ActionDict)
 
         
         self.setMenuBar(self.main_menu_pulldown)
@@ -169,14 +181,14 @@ class MainMenu(QMainWindow):
         else:
             return str(treeitem.text(0))
 
-    def geth5selectionpath(self, liststyle=False, removeformatting=True, treeitem=None):
+    def geth5selectionpath(self, liststyle=False, removeformatting=True, treeitem=None, selectiontypekey='selectiontype'):
         try:
             if treeitem is None:
                 treeitem=self.currenttreeitem
         except:
             return '/'
         attrname=None
-        if self.statusdict['selectiontype']=='Attr':
+        if self.statusdict[selectiontypekey]=='Attr':
             attrname=self.h5nodename_treeitem(treeitem, removeformatting=removeformatting)
             treeitem=treeitem.parent()
         s=[]
@@ -281,9 +293,17 @@ class MainMenu(QMainWindow):
         h5file.close()
 
     @pyqtSignature("")  
-    def on_action_plotraw_triggered(self):
-        h5file=h5py.File(self.h5path, mode='r')
-        path=self.geth5selectionpath()
+    def on_action_readplotraw_triggered(self):
+        on_action_plotraw_triggered(readh5=True)
+        
+    @pyqtSignature("")  
+    def on_action_plotraw_triggered(self, readh5=False):
+        if readh5:
+            path=self.geth5selectionpath(treeitem=self.readh5treeWidget.currentItem(), selectiontypekey='readh5selectiontype')
+            h5file=h5py.File(self.readh5path, mode='r')
+        else:
+            h5file=h5py.File(self.h5path, mode='r')
+            path=self.geth5selectionpath()
         self.data=readh5pyarray(h5file[path])
         h5file.close()
         if self.data.ndim==1:
@@ -307,6 +327,19 @@ class MainMenu(QMainWindow):
         idialog=simpleplotDialog(self, self.data[1], xdata=self.data[0])
         idialog.exec_()
 
+    @pyqtSignature("")
+    def on_action_readprintdata_triggered(self):    
+        h5file=h5py.File(self.readh5path, mode='r')
+        if self.statusdict['readh5selectiontype']=='Attr':
+            path, attrname=self.geth5selectionpath(treeitem=self.readh5treeWidget.currentItem(), selectiontypekey='readh5selectiontype')
+            self.data=h5file[path].attrs[attrname]
+            print attrname, ': ', self.data
+        elif self.statusdict['readh5selectiontype']=='Dataset':
+            path=self.geth5selectionpath(treeitem=self.readh5treeWidget.currentItem(), selectiontypekey='readh5selectiontype')
+            self.data=readh5pyarray(h5file[path])
+            print path.rpartition('/')[2], ': ', self.data
+        h5file.close()
+        
     @pyqtSignature("")
     def on_action_printdata_triggered(self):    
         h5file=h5py.File(self.h5path, mode='r')

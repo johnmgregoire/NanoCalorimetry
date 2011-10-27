@@ -113,7 +113,11 @@ class fillh5tree():
             items=[]
         for node in startnode.iterobjects():
             if isinstance(node, h5py.Dataset):
-                item=QTreeWidgetItem([node.name.rpartition('/')[2]+`node.shape`],  0)
+                nam=node.name.rpartition('/')[2]
+#                if nam=='epoch' or nam=='Epoch':
+#                    item=QTreeWidgetItem([nam+(`node.shape`[:-1])+!!!],  0)
+#                else:
+                item=QTreeWidgetItem([nam+`node.shape`],  0)
                 if self.showattrs:
                     for attrname, attrval in node.attrs.iteritems():
                         attritem=QTreeWidgetItem([self.attrstring(attrname, attrval)],  0)
