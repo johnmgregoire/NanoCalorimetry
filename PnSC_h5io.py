@@ -145,6 +145,15 @@ def gethpgroup(h5pf, h5expname, h5hpname=None):
         return h5file, h5hp
     return h5hp
 
+def assign_segmsma(h5path, h5expname, segms, segmA):
+    h5file=h5py.File(h5path, mode='r+')
+    h5hp=gethpgroup(h5file, h5expname)
+    for node in h5hp.values():
+        if 'segment_ms' in node.attrs.keys():
+            node.attrs['segment_ms']=segms
+            node.attrs['segment_mA']=segmA
+    h5file.close()
+
 def experimenthppaths(h5pf, h5expname):
     if isinstance(h5pf, str):
         h5file=h5py.File(h5pf, mode='r')
@@ -346,9 +355,11 @@ def writecellres(h5path, h5expname, h5hpname, R):
     h5res[i]=R
     #this doesn't work for unkonw reason: h5res.attrs['ambient_tempC'][i]=h5hpgrp.attrs['ambient_tempC']
     temp=h5res.attrs['ambient_tempC'][:]
-    temp[i]=h5hpgrp.attrs['ambient_tempC']
+    if 'ambient_tempC' in h5hpgrp.attrs.keys():
+        temp[i]=h5hpgrp.attrs['ambient_tempC']
+    else:
+        temp[i]=21.
     h5res.attrs['ambient_tempC']=temp[:]
-    print i, h5res.attrs['ambient_tempC'][i], h5hpgrp.attrs['ambient_tempC']
     h5file.close()
 
 def writecellres_calc(h5path, h5expname, h5hpname, R):
@@ -714,3 +725,8 @@ heatprogrammetadatafcns={\
 #
 #ans, d=calcRo_extraptoTo(p, e, h, 2, (50, 1000), o_R2poly=2, iterations=3)
 #print 'done'
+#p='F:/CHESS2011_h5MAIN/2011Jun01b_AuSiCu.h5'
+#e='AuSiCuheat1_Ro'
+#h='cell02_ro_test_1_of_1'
+#CreateHeatProgSegDictList(p, e, h, critms_step=1., critmAperms_constmA=0.01, critdelmA_constmA=10., critmA_zero=0.1)
+    

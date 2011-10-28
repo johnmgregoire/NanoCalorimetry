@@ -4,8 +4,8 @@ p='F:/CHESS2011_h5MAIN'
 px='F:/CHESS2011XRD_asimported'
 
 fnxrd_fnpnsc=[
-#('2011Jun01B.dat.h5','2011Jun01b_AuSiCu.h5',['AuSiCuheat1','AuSiCuheat2','AuSiCuheat3','AuSiCuheat4']),\
-#('2011Jun01B.dat.h5','2011Jun01b_NiTiHf.h5',['NiTiHfheat1','NiTiHfheat1_MA','NiTiHfheat1_fast','NiTiHfheat1_slow','NiTiHfheat2','NiTiHfheat2_MA']),\
+#('2011Jun01b_AuSiCu.h5',['AuSiCuheat1','AuSiCuheat2','AuSiCuheat3','AuSiCuheat4']),\
+#('2011Jun01b_NiTiHf.h5',['NiTiHfheat1','NiTiHfheat1_MA','NiTiHfheat1_fast','NiTiHfheat1_slow','NiTiHfheat2','NiTiHfheat2_MA']),\
 #('20101127AuSiCu_cell11.dat.h5', revstrip), \
 #('2011Jun01A_ZrCuAl_heat0.dat.h5', '2011Jun01a.h5'), \
 #('2011Jun01B.dat.h5', '2011Jun01b.h5'), \
@@ -21,12 +21,13 @@ fnxrd_fnpnsc=[
 
 savebool=False
 
+tryattr=lambda pnt, s:(s in pnt.attrs.keys() and (pnt.attrs[s],) or (None,))[0]
 x=[]
 y=[]
 for fnx, fn, expgrplist in fnxrd_fnpnsc:
     if not fn.endswith('.h5'):
         continue
-    f=h5py.File(os.path.join(p, fn), mode='r+')
+    f=h5py.File(os.path.join(p, fn), mode='r')
     hppnt_epoch=[]
     #for node in f['Calorimetry'].values():
     for expgrp in expgrplist:
@@ -40,7 +41,13 @@ for fnx, fn, expgrplist in fnxrd_fnpnsc:
         if not 'measurement/HeatProgram' in node:
             continue
         for node2 in node['measurement/HeatProgram'].itervalues():
-            hppnt_epoch+=[(node2, node2.attrs['epoch'], node2.attrs['CELLNUMBER'])]
+            sptup=(, )
+            for k in ['specscan','prespecscan','postspecscan']:
+                t=tryattr(node2,'postspecscan')
+                if not t is None:
+                    t=(t, )
+            
+            hppnt_epoch+=[(node2.attrs['epoch'], node2.attrs['CELLNUMBER'], node2.attrs['segment_ms'][-1], numpy.max(node2['samplecurrent'][:, :]))+sptup]
     
     specname_ep_cell_insitu=[]
     fx=h5py.File(os.path.join(px, fnx), mode='r')

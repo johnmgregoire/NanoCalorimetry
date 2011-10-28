@@ -1099,6 +1099,11 @@ def editattrs(parent, h5path, path):
     if repeat:
         h5file=h5py.File(h5path, mode='r+')
         for k, v in ad.iteritems():
+            if isinstance(v,str) and 'array' in v:
+                try:
+                    v=eval(v.replace('array', 'numpy.array'))
+                except:
+                    print 'attribute %s with value %s was not converted to an array' %(k, v)
             try:
                 h5file[path].attrs[k]=v
             except:
