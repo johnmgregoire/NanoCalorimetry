@@ -7,7 +7,7 @@ fnxrd_fnpnsc=[
 #('2011Jun01B.dat.h5','2011Jun01b_AuSiCu.h5',['AuSiCuheat1','AuSiCuheat2','AuSiCuheat3','AuSiCuheat4']),\
 #('2011Jun01B.dat.h5','2011Jun01b_NiTiHf.h5',['NiTiHfheat1','NiTiHfheat1_MA','NiTiHfheat1_fast','NiTiHfheat1_slow','NiTiHfheat2','NiTiHfheat2_MA']),\
 #('20101127AuSiCu_cell11.dat.h5', revstrip), \
-#('2011Jun01A_ZrCuAl_heat0.dat.h5', '2011Jun01a.h5'), \
+#('2011Jun01A_ZrCuAl_heat0.dat.h5', '2011Jun01a.h5', ['ZrCuAlheat1', 'ZrCuAlheat2', 'ZrCuAlheat3', 'ZrCuAlheat4', 'ZrCuAlheat5']), \
 #('2011Jun01B.dat.h5', '2011Jun01b.h5'), \
 #('2011Oct02D_AuSiCu.dat.h5', '2011Oct02D.h5'), \
 #('2011Oct02D_InSnBi.dat.h5', '2011Oct02D.h5'), \
@@ -20,7 +20,7 @@ fnxrd_fnpnsc=[
 ]
 
 savebool=False
-
+predeleteattrs=False
 x=[]
 y=[]
 for fnx, fn, expgrplist in fnxrd_fnpnsc:
@@ -41,6 +41,11 @@ for fnx, fn, expgrplist in fnxrd_fnpnsc:
             continue
         for node2 in node['measurement/HeatProgram'].itervalues():
             hppnt_epoch+=[(node2, node2.attrs['epoch'], node2.attrs['CELLNUMBER'])]
+            if predeleteattrs:
+                for k in ['specscan','prespecscan','postspecscan']:
+                    if k in node2.attrs.keys():
+                        node2.attrs['backup'+k]=node2.attrs[k]
+                        del node2.attrs[k]
     
     specname_ep_cell_insitu=[]
     fx=h5py.File(os.path.join(px, fnx), mode='r')
