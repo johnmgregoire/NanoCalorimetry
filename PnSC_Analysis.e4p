@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE Project SYSTEM "Project-4.6.dtd">
 <!-- eric4 project file for project PnSC_Analysis -->
-<!-- Saved: 2011-10-27, 15:13:47 -->
+<!-- Saved: 2011-10-28, 12:39:23 -->
 <!-- Copyright (C) 2011 ,  -->
 <Project version="4.6">
   <Language></Language>
@@ -14,12 +14,12 @@
   <Sources>
     <Source>PnSC_main.py</Source>
     <Source>PnSC_ui.py</Source>
-    <Source>__init__.py</Source>
     <Source>PnSC_dataimport.py</Source>
     <Source>PnSC_math.py</Source>
     <Source>PnSC_h5io.py</Source>
     <Source>PnSC_SCui.py</Source>
     <Source>h5_copygroup_gui2.py</Source>
+    <Source>chess2011_experimentssummary.py</Source>
   </Sources>
   <Forms>
   </Forms>

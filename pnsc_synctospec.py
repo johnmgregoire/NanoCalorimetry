@@ -1,25 +1,25 @@
 import h5py,numpy, os, operator, pylab, time
 
-#p='F:/CHESS2011_h5MAIN'
-#px='F:/CHESS2011XRD_asimported'
+p='F:/CHESS2011_h5MAIN'
+px='F:/CHESS2011XRD_asimported'
 
-p='C:/Users/JohnnyG/Desktop'
-px='C:/Users/JohnnyG/Desktop'
 fnxrd_fnpnsc=[
-#('20101127AuSiCu_cell11.dat.h5', revstrip), \
-#('2011Jun01A_ZrCuAl_heat0.dat.h5', '2011Jun01a.h5'), \
+#('2011Jun01B.dat.h5','2011Jun01b_AuSiCu.h5',['AuSiCuheat1','AuSiCuheat2','AuSiCuheat3','AuSiCuheat4']),\
+#('2011Jun01B.dat.h5','2011Jun01b_NiTiHf.h5',['NiTiHfheat1','NiTiHfheat1_MA','NiTiHfheat1_fast','NiTiHfheat1_slow','NiTiHfheat2','NiTiHfheat2_MA']),\
+#('2011Jun01A_ZrCuAl_heat0.dat.h5', '2011Jun01a.h5', ['ZrCuAlheat1', 'ZrCuAlheat2', 'ZrCuAlheat3', 'ZrCuAlheat4', 'ZrCuAlheat5']), \
 #('2011Jun01B.dat.h5', '2011Jun01b.h5'), \
-#('2011Oct02D_AuSiCu.dat.h5', '2011Oct02D.h5'), \
-#('2011Oct02D_InSnBi.dat.h5', '2011Oct02D.h5'), \
-#('2011Oct10B.dat.h5', '2011Oct10B_NiTiHf.h5'), \
-#('2011Oct10B_FeNi.dat.h5', '2011Oct10B_FeNi.h5'), \
-('2011Oct10C.dat.h5', '2011Oct10C.h5', ['borides']), \
-#('2011Oct10D_NiTiHf.dat.h5', '2011Oct10B_NiTiHf.h5'), \
+#('2011Oct02D_AuSiCu.dat.h5', '2011Oct02D_AuSiCu.h5', ['AuSiCuheats']), \
+#('2011Oct02D_InSnBi.dat.h5', '2011Oct02D_BiInSn.h5', ['Bi_DCheats', 'Bi_ACheats', 'In_DCheats', 'In_ACheats', 'Sn_DCheats', 'Sn_ACheats']), \
+#('2011Oct10B.dat.h5', '2011Oct10B_NiTiHf.h5', ['NiTiHfheat1', 'NiTiHfheat2', 'NiTiHfheat3', 'NiTiHfheat1_MA', 'NiTiHfheat2_MA', 'NiTiHfheat3_MA']), \
+#('2011Oct10B_FeNi.dat.h5', '2011Oct10B_FeNi.h5', ['DCheats', 'ACheats']), \
+#('2011Oct10C.dat.h5', '2011Oct10C.h5', ['borides']), \
+#('2011Oct10D_NiTiHf.dat.h5', '2011Oct10D.h5', ['DCheats', 'ACheats']), \
 #('BackgroundImages.dat.h5', serp), \
 #('nosampleconfigurations.dat.h5', serp), \
 ]
 
-
+savebool=1
+predeleteattrs=1
 x=[]
 y=[]
 for fnx, fn, expgrplist in fnxrd_fnpnsc:
@@ -27,13 +27,24 @@ for fnx, fn, expgrplist in fnxrd_fnpnsc:
         continue
     f=h5py.File(os.path.join(p, fn), mode='r+')
     hppnt_epoch=[]
-    #for node in f['Calorimetry'].itervalues():
+    #for node in f['Calorimetry'].values():
     for expgrp in expgrplist:
         node=f['Calorimetry'][expgrp]
+#        for nn in node.values():
+#            print nn, 'samplecurrent' in nn
+#            if 'samplecurrent' in nn:
+#                nam=nn.name.rpartition('/')[2]
+#                f.copy(node[nam], node['measurement/HeatProgram'])
+#                del node[nam]
         if not 'measurement/HeatProgram' in node:
             continue
         for node2 in node['measurement/HeatProgram'].itervalues():
             hppnt_epoch+=[(node2, node2.attrs['epoch'], node2.attrs['CELLNUMBER'])]
+            if predeleteattrs:
+                for k in ['specscan','prespecscan','postspecscan']:
+                    if k in node2.attrs.keys():
+                        node2.attrs['backup'+k]=node2.attrs[k]
+                        del node2.attrs[k]
     
     specname_ep_cell_insitu=[]
     fx=h5py.File(os.path.join(px, fnx), mode='r')
@@ -57,7 +68,7 @@ for fnx, fn, expgrplist in fnxrd_fnpnsc:
     #y+=specname_epoch
     fx.close()
     
-    savebool=True
+
     eparr=numpy.array([ep for pnt, ep, c in hppnt_epoch])
     carr=numpy.array([c for pnt, ep, c in hppnt_epoch])
     for sp, epsp, csp, insitu in specname_ep_cell_insitu:

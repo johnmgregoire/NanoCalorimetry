@@ -118,6 +118,7 @@ class MainMenu(QMainWindow):
         self.action_batchimportscdata=MainMenuQAction(self,'action_batchimportscdata', 'batch import calorimetry data setup', self.menufileio, [('h5open', [True])], self.ActionDict)
         self.action_batchimportdatafixedmsma=MainMenuQAction(self,'action_batchimportdatafixedmsma', 'batch import calorimetry data using segment info from selected HeatProgram', self.menufileio, [('h5open', [True]), ('selectiongrouptype', ['heatprogram'])], self.ActionDict)
         self.action_batchimportdatadfltmsma=MainMenuQAction(self,'action_batchimportdatadfltmsma', 'batch import calorimetry data with no segment info', self.menufileio, [('h5open', [True])], self.ActionDict)
+        self.action_copymsma=MainMenuQAction(self,'action_copymsma', 'copy selected segment info to all Heat Programs in experiment group', self.menufileio, [('h5open', [True]), ('selectiongrouptype', ['heatprogram'])], self.ActionDict)
         self.action_createh5=MainMenuQAction(self,'action_createh5', 'new h5 file', self.menufileio, [], self.ActionDict)
         self.action_createexpgrp=MainMenuQAction(self,'action_createexpgrp', 'new experiment group', self.menufileio, [('h5open', [True])], self.ActionDict)
         self.action_delh5grp=MainMenuQAction(self,'action_delh5grp', 'DELETE selected group', self.menufileio, [('h5open', [True]), ('selectiontype', ['Group'])], self.ActionDict)
@@ -366,6 +367,22 @@ class MainMenu(QMainWindow):
                     print 'ERROR IMPORTING ', p
             else:
                 self.batchfcn(batchattrdict=self.batchattrdict)
+    
+    
+    @pyqtSignature("")
+    def on_action_copymsma_triggered(self):
+        oldselection=self.geth5selectionpath(liststyle=True, removeformatting=False)
+        pathlist=self.geth5selectionpath(liststyle=True)
+        h5file, h5hpgrp=gethpgroup(self.h5path, pathlist[1], pathlist[4])
+        segms=h5hpgrp.attrs['segment_ms'][:]
+        segmA=h5hpgrp.attrs['segment_mA'][:]
+        h5file.close()
+        
+        assign_segmsma(self.h5path, pathlist[1], segms, segmA)
+        
+        h5file=h5py.File(self.h5path, mode='r')
+        fillh5tree(self.treeWidget, h5file, selectionpathlist=oldselection, hpsortattr=str(self.sortattrLineEdit.text()))
+        h5file.close()
     
     @pyqtSignature("")
     def on_action_batchimportdatafixedmsma_triggered(self):
