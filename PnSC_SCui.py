@@ -58,6 +58,9 @@ class SCrecipeDialog(QDialog):
         elif self.calctype=='AC':
             ncalcs=self.ACpksetup()
             self.filterd['ac_harmonics']=self.acfilterdflt()
+        elif self.calctype=='AC_RTPSDsetup':
+            ncalcs=self.AC_RTPSDsetup()
+            self.filterd['ac_chooseharm']=self.acvfilterdflt()
         #*****************************************************
         importfiltersButton=QPushButton()
         importfiltersButton.setText("import filters\n(overwrites if same name)")
@@ -382,6 +385,81 @@ class SCrecipeDialog(QDialog):
         QObject.connect(d['slider'], SIGNAL("sliderReleased()"), self.slidermoved5)
         return 6
         
+    def AC_RTPSDsetup(self):
+        d=self.calclayoutgen('R', [''])
+        self.parLayout.addWidget(d['widget'])
+        d['savename']='sampleresistance'
+        d['fcns']=[R_fftIV, R_fftIfV, R_liaIV, R_liaIfV]
+        d['parnames']=[['fftI', 'fftV'], ['fftI', 'fV'], ['liaI', 'liaV'], ['liaI', 'fV']]
+        d['segdkeys']=[['WinFFT_current', 'WinFFT_voltage'], ['WinFFT_current', 'WinFFT_filteredvoltage'], ['LIAharmonics_current', 'LIAharmonics_voltage'], ['LIAharmonics_current', 'LIAharmonics_filteredvoltage']]
+        d['postcombofcns']=[self.filterfill]*4
+        d['parcombofcns']=[[self.acvfilterfill, self.filterfill]]*4
+        d['slider'].setMaximum(len(d['parnames'])-1)
+        self.pardlist+=[copy.copy(d)]
+        QObject.connect(d['slider'], SIGNAL("sliderReleased()"), self.slidermoved0)
+        
+        d=self.calclayoutgen('T', [''])
+        self.parLayout.addWidget(d['widget'])
+        d['savename']='sampletemperature'
+        d['fcns']=[T_fftIV, T_fftIfV, T_liaIV, T_liaIfV]
+        d['parnames']=[['fftI', 'fftV'], ['fftI', 'fV'], ['liaI', 'liaV'], ['liaI', 'fV']]
+        d['segdkeys']=[['WinFFT_current', 'WinFFT_voltage'], ['WinFFT_current', 'WinFFT_filteredvoltage'], ['LIAharmonics_current', 'LIAharmonics_voltage'], ['LIAharmonics_current', 'LIAharmonics_filteredvoltage']]
+        d['postcombofcns']=[self.filterfill]*4
+        d['parcombofcns']=[[self.acvfilterfill, self.filterfill]]*4
+        d['slider'].setMaximum(len(d['parnames'])-1)
+        self.pardlist+=[copy.copy(d)]
+        QObject.connect(d['slider'], SIGNAL("sliderReleased()"), self.slidermoved1)
+        
+        d=self.calclayoutgen('P', ['IV', 'I2R'])
+        self.parLayout.addWidget(d['widget'])
+        d['savename']='samplepower'
+        d['fcns']=[P_fftIV, P_fftIfV, P_liaIV, P_liaIfV]
+        d['parnames']=[['fftI', 'fftV'], ['fftI', 'fV'], ['liaI', 'liaV'], ['liaI', 'fV']]
+        d['segdkeys']=[['WinFFT_current', 'WinFFT_voltage'], ['WinFFT_current', 'WinFFT_filteredvoltage'], ['LIAharmonics_current', 'LIAharmonics_voltage'], ['LIAharmonics_current', 'LIAharmonics_filteredvoltage']]
+        d['postcombofcns']=[self.filterfill]*4
+        d['parcombofcns']=[[self.acvfilterfill, self.filterfill]]*4
+        d['slider'].setMaximum(len(d['parnames'])-1)
+        self.pardlist+=[copy.copy(d)]
+        QObject.connect(d['slider'], SIGNAL("sliderReleased()"), self.slidermoved2)
+        
+        d=self.calclayoutgen('S', ['dT/dt'])#, 'avedT/dt'])
+        self.parLayout.addWidget(d['widget'])
+        d['savename']='sampleheatrate'
+        d['fcns']=[S_T]#, S_Tavesl]
+        d['parnames']=[['T']]#, ['dTdt']]
+        d['segdkeys']=[['sampletemperature']]#, ['sampletemperature']]
+        d['postcombofcns']=[self.filterfill]#, self.filterfill]
+        d['parcombofcns']=[[self.derfilterfill]]#, [self.derfilterfill]]
+        d['slider'].setMaximum(len(d['parnames'])-1)
+        self.pardlist+=[copy.copy(d)]
+        QObject.connect(d['slider'], SIGNAL("sliderReleased()"), self.slidermoved3)
+        
+        d=self.calclayoutgen('D', ['P/S'])
+        self.parLayout.addWidget(d['widget'])
+        d['savename']='samplepowerperrate'
+        d['fcns']=[D_PS]
+        d['parnames']=[['P', 'S']]
+        d['segdkeys']=[['samplepower', 'sampleheatrate']]
+        d['postcombofcns']=[self.filterfill]
+        d['parcombofcns']=[[self.filterfill, self.filterfill]]
+        d['slider'].setMaximum(len(d['parnames'])-1)
+        self.pardlist+=[copy.copy(d)]
+        QObject.connect(d['slider'], SIGNAL("sliderReleased()"), self.slidermoved4)
+        
+        d=self.calclayoutgen('mCp', ['HeatCap'])
+        self.parLayout.addWidget(d['widget'])
+        d['savename']='acheatcapacity'
+        d['fcns']=[mCp_fftVIPdT, mCp_fftfVIPdT, mCp_liaVIPdT, mCp_liafVIPdT]
+        d['parnames']=[['fftV', 'fftI', 'P', 'dT'], ['ffV', 'fftI', 'P', 'dT'], ['liaV', 'liaI', 'P', 'dT'], ['lfV', 'liaI', 'P', 'dT']]
+        d['segdkeys']=[['WinFFT_voltage', 'WinFFT_current', 'samplepower', 'sampleheatrate'], ['WinFFT_filteredvoltage', 'WinFFT_current', 'samplepower', 'sampleheatrate'], ['LIAharmonics_voltage', 'LIAharmonics_filteredcurrent', 'samplepower', 'sampleheatrate'], ['LIAharmonics_filteredvoltage', 'LIAharmonics_filteredcurrent', 'samplepower', 'sampleheatrate']]
+        d['postcombofcns']=[self.filterfill]*4
+        d['parcombofcns']=[[self.acvfilterfill, self.filterfill, self.filterfill, self.filterfill]]*4
+        d['slider'].setMaximum(len(d['parnames'])-1)
+        self.pardlist+=[copy.copy(d)]
+        QObject.connect(d['slider'], SIGNAL("sliderReleased()"), self.slidermoved5)
+        
+        return 6
+        
     def ExitRoutine(self):
         if self.saveCheckBox.isChecked():
             self.savefilters()
@@ -614,9 +692,12 @@ class SCrecipeDialog(QDialog):
         self.filterfill(cb, reqkeys=['REFh5path', 'REFalignment'])
     
     def liafilterfill(self, cb):
-        self.filterfill(cb, reqkeys=['n1wcycles_window', 'harmonics'])
+        self.filterfill(cb, reqkeys=['n1wcycles_window'])
     def winfftfilterfill(self, cb):
         self.filterfill(cb, reqkeys=['n1wcycles_window'])
+    
+    def acvfilterfill(self, cb):
+        self.filterfill(cb, reqkeys=['harmonic'])
         
     def dfltfitfilterdicts(self, deriv=0):
         return [{'name':'timepart', 'numpartitions':1}, #contants and any other piecewise parameters have this many segments and these starting values\
@@ -630,7 +711,7 @@ class SCrecipeDialog(QDialog):
         return {'OLnpts':1, \
                 'OLnsig':1.5, \
                 'OLgappts':0, \
-                'SGnpts':3, \
+                'SGnpts':40, \
                 'SGorder':1, \
                 'SGderiv':deriv, \
                 'SGbin':0, \
@@ -645,8 +726,14 @@ class SCrecipeDialog(QDialog):
         'critcurve':None, 'pospeaks':1, 'negpeaks':1}
     
     def acfilterdflt(self):
-        return {'n1wcycles_window':2, 'harmonics':[1, 2, 3]}
+        return {'n1wcycles_window':10}#, 'harmonics':[0, 1, 2, 3]}
 
+    def acvfilterdflt(self):
+        d=dfltfilterdict
+        d['SGnpts']=0
+        d['harmonic']=2
+        return d
+    
     def Nonefilterdict(self):
         return {'None':None, \
                 }
@@ -1173,13 +1260,15 @@ class analysisviewerDialog(QDialog):
         
 def R_IV(segd, fild, I, V, h5path=None, h5expname=None, h5hpname=None):#the I, dIdt, etc. should be tuples with a key for segd and then a key for fild
     for tup in [I, V]:
-        (segkey, filkey)=tup
-        if not '~'.join(tup) in segd.keys():
-            segd['~'.join(tup)]=performgenericfilter(segd[segkey], fild[filkey])
-        #if True in [v>0 for k, v in fild[filkey].iteritems() if 'deriv' in k]: #this handle deriv filters other than SG but if the deriv is not wrt dt something needs to change
-        #    segd['~'.join(tup)]/=dt
-    I_=segd['~'.join(I)]
-    V_=segd['~'.join(V)]
+        (segkey, filkey)=tup[:2]
+        if not '~'.join(tup[:2]) in segd.keys():
+            if len(tup)==3:
+                arr=tup[2]
+            else:
+                arr=segd[segkey]
+            segd['~'.join(tup[:2])]=performgenericfilter(arr, fild[filkey])
+    I_=segd['~'.join(I[:2])]
+    V_=segd['~'.join(V[:2])]
     inds=numpy.where(I_<=0.)# these 3 lines will effectively remove neg and inf Res and replace them with the res value of the nearest acceptable value. These modification will no be reflected in the segd values for the source data
     if len(inds[0])>0:
         I_=replacevalswithneighsin2nddim(I_, inds)
@@ -1189,13 +1278,15 @@ def R_IV(segd, fild, I, V, h5path=None, h5expname=None, h5hpname=None):#the I, d
 def T_IV(segd, fild, I, V, h5path, h5expname, h5hpname):#the I, dIdt, etc. should be tuples with a key for segd and then a key for fild
     RoToAl=RoToAl_h5(h5path, h5expname, h5hpname)
     for tup in [I, V]:
-        (segkey, filkey)=tup
-        if not '~'.join(tup) in segd.keys():
-            segd['~'.join(tup)]=performgenericfilter(segd[segkey], fild[filkey])
-        #if True in [v>0 for k, v in fild[filkey].iteritems() if 'deriv' in k]: #this handle deriv filters other than SG but if the deriv is not wrt dt something needs to change
-        #    segd['~'.join(tup)]/=dt
-    I_=segd['~'.join(I)]
-    V_=segd['~'.join(V)]
+        (segkey, filkey)=tup[:2]
+        if not '~'.join(tup[:2]) in segd.keys():
+            if len(tup)==3:
+                arr=tup[2]
+            else:
+                arr=segd[segkey]
+            segd['~'.join(tup[:2])]=performgenericfilter(arr, fild[filkey])
+    I_=segd['~'.join(I[:2])]
+    V_=segd['~'.join(V[:2])]
     inds=numpy.where(I_<=0.)# these 3 lines will effectively remove neg and inf Res and replace them with the res value of the nearest acceptable value. These modification will no be reflected in the segd values for the source data
     if len(inds[0])>0:
         I_=replacevalswithneighsin2nddim(I_, inds)
@@ -1205,13 +1296,15 @@ def T_IV(segd, fild, I, V, h5path, h5expname, h5hpname):#the I, dIdt, etc. shoul
 
 def P_IV(segd, fild, I, V, h5path=None, h5expname=None, h5hpname=None):
     for tup in [I, V]:
-        (segkey, filkey)=tup
-        if not '~'.join(tup) in segd.keys():
-            segd['~'.join(tup)]=performgenericfilter(segd[segkey], fild[filkey])
-        #if True in [v>0 for k, v in fild[filkey].iteritems() if 'deriv' in k]: #this handle deriv filters other than SG but if the deriv is not wrt dt something needs to change
-        #    segd['~'.join(tup)]/=dt
-    I_=segd['~'.join(I)]
-    V_=segd['~'.join(V)]
+        (segkey, filkey)=tup[:2]
+        if not '~'.join(tup[:2]) in segd.keys():
+            if len(tup)==3:
+                arr=tup[2]
+            else:
+                arr=segd[segkey]
+            segd['~'.join(tup[:2])]=performgenericfilter(arr, fild[filkey])
+    I_=segd['~'.join(I[:2])]
+    V_=segd['~'.join(V[:2])]
     return I_*V_
 
 def P_IR(segd, fild, I, R, h5path=None, h5expname=None, h5hpname=None):
@@ -1687,11 +1780,19 @@ def WinFFT(segd, fild, X, h5path, h5expname, h5hpname):
     (segkey, filkey)=X
     n=ptspercyc*fild[filkey]['n1wcycles_window']
     #for i in fild[filkey]['harmonics']:
-    ans=numpy.empty((segd[segkey].shape[0], segd[segkey].shape[1], n//2+1, 2), dtype='float32')
+    #ans=numpy.empty((segd[segkey].shape[0], segd[segkey].shape[1], n//2+1, 2), dtype='float32')
+    ans=numpy.empty((segd[segkey].shape[0], segd[segkey].shape[1], 10, 2), dtype='float32')
+    
+    freq_1w=(numpy.array(range(n//2+1))/n)*ptspercyc
+    i2w=numpy.argmin((1.-freq_1w)**2)
+    i2w=numpy.argmin((2.-freq_1w)**2)
+    i3w=numpy.argmin((3.-freq_1w)**2)
+    saveinds=[0, i1w-1, i1w, i1w+1, i2w-1, i2w, i2w+1, i3w-1, i3w, i3w+1]
     for i, arr in enumerate(segd[segkey]):
-        ans[i, :, :, 0], ans[i, :, :, 1]=windowfft_ampphase(arr, n)
-        #****
-    return ans #makes array that is cycles x nptsinsegx nptsinfftx2 , the frequencies are in units of daqHz and are  numpy.array(range(n//2+1))/n.
+        fftx, ffty=windowfft_xy(arr, n)
+        ans[i, :, :, 0]=fftx[saveinds]
+        ans[i, :, :, 1]=ffty[saveinds]
+    return ans #makes array that is cycles x nptsinsegx 10 x2 , where the 10 are 0w,1w-,1w,1w+,2w-,2w,2w+,3w-,3w,3w+, the separation between neibhboring frequencies is daqHz/totnumptsinwindow or daqHz/(ptspercyc*n1wcycles_window).
 
 def LIAI(segd, fild, I, h5path, h5expname, h5hpname):
     return LIA(segd, fild, I, h5path, h5expname, h5hpname)
@@ -1703,13 +1804,145 @@ def LIAfV(segd, fild, fV, h5path, h5expname, h5hpname):
 def LIA(segd, fild, X, h5path, h5expname, h5hpname):
     ptspercyc=pts_sincycle_h5(h5path, h5expname, h5hpname)
     (segkey, filkey)=X
-    hlist=fild[filkey]['harmonics']
+    #hlist=fild[filkey]['harmonics']
+    hlist=[1, 2, 3]
     ans=numpy.empty((segd[segkey].shape[0], segd[segkey].shape[1], len(hlist), 2), dtype='float32')
     for i, arr in enumerate(segd[segkey]):
         for j, h in enumerate(hlist):
-            ans[i, :, j, 0], ans[i, :, j, 1]=lia_ampphase(arr, ptspercyc/h, ncyclewin=fild[filkey]['n1wcycles_window']*h, phaseshift=0.)
-    return ans #makes array that is cycles x nptsinsegxharmonic x 2foramp+phase
+            ans[i, :, j, 0], ans[i, :, j, 1]=lia_xy(arr, ptspercyc/h, ncyclewin=fild[filkey]['n1wcycles_window']*h)
+            #ans[i, :, j, 0], ans[i, :, j, 1]=lia_ampphase(arr, ptspercyc/h, ncyclewin=fild[filkey]['n1wcycles_window']*h, phaseshift=0.)
+    return ans #makes array that is cycles x nptsinsegxharmonic x 2for x,y
+
+def R_fftIV(segd, fild, fftI, fftV, h5path=None, h5expname=None, h5hpname=None):
+    h=fild[fftI[1]]['harmonic']
+    freqind=h*3-1*(h>0)
+    I=fftI+(segd[fftI[0]][:, :, freqind, 0],)
+    V=fftV+(segd[fftV[0]][:, :, freqind, 0],)
+    return R_IV(segd, fild, I, V, h5path=h5path, h5expname=h5expname, h5hpname=h5hpname)
+
+def T_fftIV(segd, fild, fftI, fftV, h5path, h5expname, h5hpname):
+    h=fild[fftI[1]]['harmonic']
+    freqind=h*3-1*(h>0)
+    I=fftI+(segd[fftI[0]][:, :, freqind, 0],)
+    V=fftV+(segd[fftV[0]][:, :, freqind, 0],)
+    return T_IV(segd, fild, I, V, h5path=h5path, h5expname=h5expname, h5hpname=h5hpname)
+
+def P_fftIV(segd, fild, fftI, fftV, h5path, h5expname, h5hpname):
+    h=fild[fftI[1]]['harmonic']
+    freqind=h*3-1*(h>0)
+    I=fftI+(segd[fftI[0]][:, :, freqind, 0],)
+    V=fftV+(segd[fftV[0]][:, :, freqind, 0],)
+    return P_IV(segd, fild, I, V, h5path=h5path, h5expname=h5expname, h5hpname=h5hpname)
+
+def R_liaIV(segd, fild, liaI, liaV, h5path=None, h5expname=None, h5hpname=None):
+    h=fild[liaI[1]]['harmonic']
+    freqind=h-1
+    I=liaI+(segd[liaI[0]][:, :, freqind, 0],)
+    V=liaV+(segd[liaV[0]][:, :, freqind, 0],)
+    return R_IV(segd, fild, I, V, h5path=h5path, h5expname=h5expname, h5hpname=h5hpname)
+
+def T_liaIV(segd, fild, liaI, liaV, h5path=None, h5expname=None, h5hpname=None):
+    h=fild[liaI[1]]['harmonic']
+    freqind=h-1
+    I=liaI+(segd[liaI[0]][:, :, freqind, 0],)
+    V=liaV+(segd[liaV[0]][:, :, freqind, 0],)
+    return T_IV(segd, fild, I, V, h5path=h5path, h5expname=h5expname, h5hpname=h5hpname)
+
+def P_liaIV(segd, fild, liaI, liaV, h5path=None, h5expname=None, h5hpname=None):
+    h=fild[liaI[1]]['harmonic']
+    freqind=h-1
+    I=liaI+(segd[liaI[0]][:, :, freqind, 0],)
+    V=liaV+(segd[liaV[0]][:, :, freqind, 0],)
+    return P_IV(segd, fild, I, V, h5path=h5path, h5expname=h5expname, h5hpname=h5hpname)
+
+def R_fftIfV(segd, fild, fftI, fV, h5path=None, h5expname=None, h5hpname=None):
+    return R_fftIV(segd, fild, fftI, fV, h5path=h5path, h5expname=h5expname, h5hpname=h5hpname)
+def T_fftIfV(segd, fild, fftI, fV, h5path=None, h5expname=None, h5hpname=None):
+    return T_fftIV(segd, fild, fftI, fV, h5path=h5path, h5expname=h5expname, h5hpname=h5hpname)
+def P_fftIfV(segd, fild, fftI, fV, h5path=None, h5expname=None, h5hpname=None):
+    return P_fftIV(segd, fild, fftI, fV, h5path=h5path, h5expname=h5expname, h5hpname=h5hpname)
+
+def R_liaIfV(segd, fild, liaI, fV, h5path=None, h5expname=None, h5hpname=None):
+    return R_liaIV(segd, fild, liaI, fV, h5path=h5path, h5expname=h5expname, h5hpname=h5hpname)
+def T_liaIfV(segd, fild, liaI, fV, h5path=None, h5expname=None, h5hpname=None):
+    return T_liaIV(segd, fild, liaI, fV, h5path=h5path, h5expname=h5expname, h5hpname=h5hpname)
+def P_liaIfV(segd, fild, liaI, fV, h5path=None, h5expname=None, h5hpname=None):
+    return P_liaIV(segd, fild, liaI, fV, h5path=h5path, h5expname=h5expname, h5hpname=h5hpname)
+
+def mCp_fftVIPdT(segd, fild, fftV, fftI, P, dT, h5path, h5expname, h5hpname):
+    h=fild[fftV[1]]['harmonic']
+    harmind=h*3-1*(h>0)
+    return mCp_gen(segd, fild, fftV, fftI, P, dT, h5path, h5expname, h5hpname, h, harmind)
+
+def mCp_ffVIPdT(segd, fild, ffV, fftI, P, dT, h5path, h5expname, h5hpname):
+    h=fild[ffV[1]]['harmonic']
+    harmind=h*3-1*(h>0)
+    return mCp_gen(segd, fild, ffV, fftI, P, dT, h5path, h5expname, h5hpname, h, harmind, Vsrcisfiltered=True)
     
+def mCp_liaVIPdT(segd, fild, liaV, liaI, P, dT, h5path, h5expname, h5hpname):
+    h=fild[liaV[1]]['harmonic']
+    harmind=h-1
+    return mCp_gen(segd, fild, liaV, liaI, P, dT, h5path, h5expname, h5hpname, h, harmind)
+
+def mCp_lfVIPdT(segd, fild, lfV, liaI, P, dT, h5path, h5expname, h5hpname):
+    h=fild[lfV[1]]['harmonic']
+    harmind=h-1
+    return mCp_gen(segd, fild, lfV, liaI, P, dT, h5path, h5expname, h5hpname, h, harmind, Vsrcisfiltered=True)
+    
+def mCp_gen(segd, fild, acV, acI, P, dT, h5path, h5expname, h5hpname, h, harmind, harm01inds, Vsrcisfiltered=False):#the I, dIdt, etc. should be tuples with a key for segd and then a key for fild
+    RoToAl=RoToAl_h5(h5path, h5expname, h5hpname)
+    ppc=pts_sincycle_h5(h5path, h5expname, h5hpname)
+    dt=dt_h5(h5path, h5expname, h5hpname)
+    freq1w=1./(ppc*dt)
+    if h<2:
+        return D_PS(segd, fild, P, dT, h5path=h5path, h5expname=h5expname, h5hpname=h5hpname)
+    elif h==2:
+        mCpfcn=mCp_2w
+    elif h==3:
+        mCpfcn=mCp_3w
+    else:
+        print 'invalid harmonic value - abort'
+        return None
+    acV+=(segd[acV[0]][:, :, harmind, :],)#the last ":" is for using X and Y, any smoothing filter will be applied to both
+    acI+=(segd[acI[0]][:, :, harm01inds+[harmind], :],)
+    for tup in [acV, acI, P, dT]:
+        (segkey, filkey)=tup[:2]
+        if not '~'.join(tup[:2]) in segd.keys():
+            if len(tup)==3:
+                arr=tup[2]
+            else:
+                arr=segd[segkey]
+            segd['~'.join(tup[:2])]=performgenericfilter(arr, fild[filkey])
+    acV_=segd['~'.join(acV[:2])]
+    acI_=segd['~'.join(acI[:2])]
+    #P_=segd['~'.join(P[:2])]
+    dT_=segd['~'.join(dT[:2])]
+    inds=numpy.where(acV_[:, :, 0]<=0.)# these 3 lines will effectively remove neg and inf Res and replace them with the res value of the nearest acceptable value. These modification will no be reflected in the segd values for the source data
+    if len(inds[0])>0:
+        acV_[:, :, 0]=replacevalswithneighsin2nddim(acV_[:, :, 0], inds)
+        acV_[:, :, 1]=replacevalswithneighsin2nddim(acV_[:, :, 1], inds)
+        acI_[:, :, 2, 0]=replacevalswithneighsin2nddim(acI_[:, :, 2, 0], inds)
+        acI_[:, :, 2, 1]=replacevalswithneighsin2nddim(acI_[:, :, 2, 1], inds)
+        #P_=replacevalswithneighsin2nddim(P_, inds)
+        #dT_=replacevalswithneighsin2nddim(dT_, inds)
+    mCpargdict={}
+    mCpargdict['VX']=acV_[:, :, 0]
+    mCpargdict['VY']=acV_[:, :, 1]
+    mCpargdict['I0X']=acI_[:, :, 0, 0]
+    mCpargdict['I0Y']=acI_[:, :, 0, 1]
+    mCpargdict['I1X']=acI_[:, :, 1, 0]
+    mCpargdict['I1Y']=acI_[:, :, 1, 1]
+    mCpargdict['IX']=acI_[:, :, 2, 0]
+    mCpargdict['IY']=acI_[:, :, 2, 1]
+    #mCpargdict['P']=P_
+    mCpargdict['dT']=dT_
+    mCpargdict['Ro']=RoToAl[0]
+    mCpargdict['tcr']=RoToAl[2]
+    mCpargdict['freq1w']=freq1w
+    mCpargdict['Vsrcisfiltered']=Vsrcisfiltered
+    return mCpfcn([(k, v) for k, v in mCpargdict.itervalues() if k in f.func_code.co_varnames[:f.func_code.co_argcount]])
+
+
 #p='C:/Users/JohnnyG/Documents/PythonCode/Vlassak/NanoCalorimetry/Nanocopeia1_PnSC.h5'
 ##p='C:/Users/JohnnyG/Documents/HarvardWork/pharma/PnSC/Nanocopeia1_PnSC.h5'
 #e='NoSampleRamps'
