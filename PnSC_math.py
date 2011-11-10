@@ -19,12 +19,24 @@ def concat_extrap_ends(x, npts, polyorder=1, lowside=True, highside=True):
     if lowside:
         ans=scipy.polyfit(-1*(i+1.), x[:npts], polyorder)
         x=numpy.concatenate([scipy.polyval(list(ans), i[::-1]), x])
-    if lowside:
+    if highside:
         ans=scipy.polyfit(-1*(i[::-1]-1.), x[-1*npts:], polyorder)
         x=numpy.concatenate([x, scipy.polyval(list(ans), i)])
     return x    
     
+def lininterpbetweenregularpoints(existy, interval):
+    existy=numpy.array(existy)
+    x=numpy.arange(interval,dtype='float32')/interval
+    diff=existy[1:]-existy[:-1]
+    o=numpy.outer(diff,x)
+    return numpy.concatenate([arr+start for arr,start in zip(o,existy[:-1])]+[existy[-1:]])
+    
 def interpwithinarr(existind, existy, order=3, interpplotax=None, interpcols=['k', 'r']):
+    if order==1:
+        existind=numpy.array(existind)
+        diff=existind[1:]-existind[:-1]
+        if numpy.all(diff==diff[0]):
+            return lininterpbetweenregularpoints(existy, diff[0])
     interind=sorted(list(set(numpy.arange(max(existind)+1))-set(existind)))
     yfull=numpy.zeros(max(existind)+1, existy.dtype)
     yfull[existind]=existy[:]
@@ -511,30 +523,38 @@ def windowfft_ampphase(x, npts_win, pad=True, ptspercyc=None):
     return amp/npts_win, phase #frequencies are in units of daqHz and are  numpy.array(range(npts_win//2+1))/npts_win.
 
     
-def windowfft_xy(x, npts_win, pad=True, ptspercyc=None, nptswinstartinterval=1, extrappolyorder=1, interporder=3, interpplotax=None):
-    symmetryfactor=2.*numpy.ones(npts_win//2+1, dtype='float64')
-    symmetryfactor[0]=1.
+def windowfft_xy(x, npts_win, pad=True, ptspercyc=None, nptswinstartinterval=1, extrappolyorder=1, interporder=3, interpplotax=None, freqinds=None):
+    if freqinds is None:
+        freqinds=range(npts_win//2+1)
+    symmetryfactor=2.*numpy.ones(len(freqinds), dtype='float64')
+    symmetryfactor[numpy.where(numpy.array(freqinds)==0)]=1.
     
     if nptswinstartinterval>1:
         starti=range(0, len(x)-npts_win, nptswinstartinterval)
     else:
         starti=numpy.arange(len(x)-npts_win)
-    comp=numpy.array([numpy.fft.fft(x[i:i+npts_win])[:npts_win//2+1]*symmetryfactor for i in starti])
-    fftx, ffty=numpy.array([[numpy.real(c), numpy.imag(c)] for c in comp]).swapaxes(0, 1)
+    print x.shape
+    comp=numpy.array([numpy.fft.fft(x[i:i+npts_win])[freqinds]*symmetryfactor for i in starti])
+    print comp.shape
+    fftx, ffty=numpy.array([[numpy.real(c), numpy.imag(c)] for c in comp]).swapaxes(0, 1).swapaxes(1, 2) #swapaxes makes X,Y first index and then frequencies  and then data points like that of x
+    print fftx.shape
     fftx/=npts_win
     ffty/=npts_win
     
     if nptswinstartinterval>1:
-        fftx=interpwithinarr(starti, fftx, order=interporder, interpplotax=interpplotax, interpcols=['k', 'r'])
-        ffty=interpwithinarr(starti, ffty, order=interporder, interpplotax=interpplotax, interpcols=['g', 'y'])
+        fftx=numpy.array([interpwithinarr(starti, a, order=interporder, interpplotax=interpplotax, interpcols=['k', 'r']) for a in fftx])
+        ffty=numpy.array([interpwithinarr(starti, a, order=interporder, interpplotax=interpplotax, interpcols=['g', 'y']) for a in ffty])
         
     nptsextrap=npts_win//2
-    fftx=concat_extrap_ends(liax, nptsextrap, highside=False, polyorder=extrappolyorder)
-    ffty=concat_extrap_ends(ffty, nptsextrap, highside=False, polyorder=extrappolyorder)
-    fftx=concat_extrap_ends(fftx, len(x)-len(fftx), lowside=False, polyorder=extrappolyorder)
-    ffty=concat_extrap_ends(ffty, len(x)-len(ffty), lowside=False, polyorder=extrappolyorder)
+    print fftx.shape
+    fftx=numpy.array([concat_extrap_ends(a, nptsextrap, highside=False, polyorder=extrappolyorder) for a in fftx])
+    print nptsextrap,  fftx.shape
+    ffty=numpy.array([concat_extrap_ends(a, nptsextrap, highside=False, polyorder=extrappolyorder) for a in ffty])
+    fftx=numpy.array([concat_extrap_ends(a, len(x)-len(a), lowside=False, polyorder=extrappolyorder) for a in fftx])
+    print   len(x), len(x)-len(a),  fftx.shape
+    ffty=numpy.array([concat_extrap_ends(a, len(x)-len(a), lowside=False, polyorder=extrappolyorder) for a in ffty])
     
-    return fftx, ffty #frequencies are in units of daqHz and are  numpy.array(range(npts_win//2+1))/npts_win.
+    return fftx.T, ffty.T #frequencies are second index and are in units of daqHz and are  numpy.array(range(npts_win//2+1))/npts_win, first index is same as x
     
 def performgenericfilter(arr, filterdict):#filterdict can contains unused key:val but it must contain all those necessary for a given filter step to be performed
     iterateoverlastdim=(arr.ndim>=3)

@@ -41,7 +41,7 @@ class SCrecipeDialog(QDialog):
         if self.calctype=='RTPSD':
             ncalcs=self.RTPSDsetup()
             self.filterd['dflt']=self.dfltfilterdict(deriv=0)
-            self.filterd['dt_dflt']=self.dfltfilterdict(deriv=1)
+            self.filterd['dt_dflt']=self.dfltfilterdict(deriv=1, SGnpts=70)
         elif self.calctype=='FitPS':
             ncalcs=self.FitPSsetup()
             for d in self.dfltfitfilterdicts():
@@ -58,9 +58,12 @@ class SCrecipeDialog(QDialog):
         elif self.calctype=='AC':
             ncalcs=self.ACpksetup()
             self.filterd['ac_harmonics']=self.acfilterdflt()
-        elif self.calctype=='AC_RTPSDsetup':
+        elif self.calctype=='AC_RTPSD':
             ncalcs=self.AC_RTPSDsetup()
-            self.filterd['ac_chooseharm']=self.acvfilterdflt()
+            self.filterd['ac_harm1']=self.acvfilterdflt(1)
+            self.filterd['ac_harm2']=self.acvfilterdflt(2)
+            self.filterd['dflt']=self.dfltfilterdict(deriv=0)
+            self.filterd['dt_dflt']=self.dfltfilterdict(deriv=1, SGnpts=70)
         #*****************************************************
         importfiltersButton=QPushButton()
         importfiltersButton.setText("import filters\n(overwrites if same name)")
@@ -135,11 +138,11 @@ class SCrecipeDialog(QDialog):
         rightlayout.addWidget(self.recLineEdit, 4, 1)
         mainlayout.addLayout(rightlayout, 1, 2, 4, 2)
         
-        mainlayout.addLayout(self.parLayout, 5, 0, ncalcs*4, 4)
+        mainlayout.addLayout(self.parLayout, 0, 5, ncalcs*4, 5)
         self.saveCheckBox=QCheckBox()
         self.saveCheckBox.setText('save calculations upon close')
-        mainlayout.addWidget(self.saveCheckBox, 25, 0, 1, 2)
-        mainlayout.addWidget(self.buttonBox, ncalcs*4+5, 2, 1, 2)
+        mainlayout.addWidget(self.saveCheckBox, 5, 0, 1, 2)
+        mainlayout.addWidget(self.buttonBox, 5, 2, 1, 2)
         self.setLayout(mainlayout)
         
         self.plotdialog=None
@@ -196,11 +199,11 @@ class SCrecipeDialog(QDialog):
         d=self.calclayoutgen('S', ['(IdV-VdI)/dI2', 'dT/dt'])#, 'avedT/dt'])
         self.parLayout.addWidget(d['widget'])
         d['savename']='sampleheatrate'
-        d['fcns']=[S_IV, S_T]#, S_Tavesl]
-        d['parnames']=[['I', 'V', 'dIdt', 'dVdt'], ['dTdt']]#, ['dTdt']]
-        d['segdkeys']=[['samplecurrent', 'samplevoltage', 'samplecurrent', 'samplevoltage'], ['sampletemperature']]#, ['sampletemperature']]
-        d['postcombofcns']=[self.filterfill, self.filterfill]#, self.filterfill]
-        d['parcombofcns']=[[self.filterfill, self.filterfill, self.derfilterfill, self.derfilterfill], [self.derfilterfill]]#, [self.derfilterfill]]
+        d['fcns']=[S_T]#, S_Tavesl]     S_IV, 
+        d['parnames']=[['dTdt']]#, ['dTdt']]     ['I', 'V', 'dIdt', 'dVdt'], 
+        d['segdkeys']=[['sampletemperature']]#, ['sampletemperature']]    ['samplecurrent', 'samplevoltage', 'samplecurrent', 'samplevoltage'], 
+        d['postcombofcns']=[self.filterfill]#, self.filterfill]     self.filterfill, 
+        d['parcombofcns']=[[self.derfilterfill]]#, [self.derfilterfill]]   [self.filterfill, self.filterfill, self.derfilterfill, self.derfilterfill], 
         d['slider'].setMaximum(len(d['parnames'])-1)
         self.pardlist+=[copy.copy(d)]
         QObject.connect(d['slider'], SIGNAL("sliderReleased()"), self.slidermoved3)
@@ -208,11 +211,11 @@ class SCrecipeDialog(QDialog):
         d=self.calclayoutgen('D', ['IVdI2/(IdV-VdI)', 'P/S'])
         self.parLayout.addWidget(d['widget'])
         d['savename']='samplepowerperrate'
-        d['fcns']=[D_IV, D_PS]
-        d['parnames']=[['I', 'V', 'dIdt', 'dVdt'], ['P', 'S']]
-        d['segdkeys']=[['samplecurrent', 'samplevoltage', 'samplecurrent', 'samplevoltage'], ['samplepower', 'sampleheatrate']]
-        d['postcombofcns']=[self.filterfill, self.filterfill]
-        d['parcombofcns']=[[self.filterfill, self.filterfill, self.derfilterfill, self.derfilterfill], [self.filterfill, self.filterfill]]
+        d['fcns']=[D_PS]#D_IV, 
+        d['parnames']=[['P', 'S']] #['I', 'V', 'dIdt', 'dVdt'], 
+        d['segdkeys']=[['samplepower', 'sampleheatrate']] #['samplecurrent', 'samplevoltage', 'samplecurrent', 'samplevoltage'], 
+        d['postcombofcns']=[self.filterfill] #self.filterfill, 
+        d['parcombofcns']=[[self.filterfill, self.filterfill]] #[self.filterfill, self.filterfill, self.derfilterfill, self.derfilterfill], 
         d['slider'].setMaximum(len(d['parnames'])-1)
         self.pardlist+=[copy.copy(d)]
         QObject.connect(d['slider'], SIGNAL("sliderReleased()"), self.slidermoved4)
@@ -386,38 +389,38 @@ class SCrecipeDialog(QDialog):
         return 6
         
     def AC_RTPSDsetup(self):
-        d=self.calclayoutgen('R', [''])
+        d=self.calclayoutgen('R', ['fft', 'fftfltr', 'lia', 'liafltr'])
         self.parLayout.addWidget(d['widget'])
         d['savename']='sampleresistance'
         d['fcns']=[R_fftIV, R_fftIfV, R_liaIV, R_liaIfV]
         d['parnames']=[['fftI', 'fftV'], ['fftI', 'fV'], ['liaI', 'liaV'], ['liaI', 'fV']]
         d['segdkeys']=[['WinFFT_current', 'WinFFT_voltage'], ['WinFFT_current', 'WinFFT_filteredvoltage'], ['LIAharmonics_current', 'LIAharmonics_voltage'], ['LIAharmonics_current', 'LIAharmonics_filteredvoltage']]
         d['postcombofcns']=[self.filterfill]*4
-        d['parcombofcns']=[[self.acvfilterfill, self.filterfill]]*4
+        d['parcombofcns']=[[self.acvfilterfill, self.filterfill]]*2+[[self.acvh1filterfill, self.filterfill]]*2
         d['slider'].setMaximum(len(d['parnames'])-1)
         self.pardlist+=[copy.copy(d)]
         QObject.connect(d['slider'], SIGNAL("sliderReleased()"), self.slidermoved0)
         
-        d=self.calclayoutgen('T', [''])
+        d=self.calclayoutgen('T', ['fft', 'fftfltr', 'lia', 'liafltr'])
         self.parLayout.addWidget(d['widget'])
         d['savename']='sampletemperature'
         d['fcns']=[T_fftIV, T_fftIfV, T_liaIV, T_liaIfV]
         d['parnames']=[['fftI', 'fftV'], ['fftI', 'fV'], ['liaI', 'liaV'], ['liaI', 'fV']]
         d['segdkeys']=[['WinFFT_current', 'WinFFT_voltage'], ['WinFFT_current', 'WinFFT_filteredvoltage'], ['LIAharmonics_current', 'LIAharmonics_voltage'], ['LIAharmonics_current', 'LIAharmonics_filteredvoltage']]
         d['postcombofcns']=[self.filterfill]*4
-        d['parcombofcns']=[[self.acvfilterfill, self.filterfill]]*4
+        d['parcombofcns']=[[self.acvfilterfill, self.filterfill]]*2+[[self.acvh1filterfill, self.filterfill]]*2
         d['slider'].setMaximum(len(d['parnames'])-1)
         self.pardlist+=[copy.copy(d)]
         QObject.connect(d['slider'], SIGNAL("sliderReleased()"), self.slidermoved1)
         
-        d=self.calclayoutgen('P', ['IV', 'I2R'])
+        d=self.calclayoutgen('P', ['fft', 'fftfltr', 'lia', 'liafltr'])
         self.parLayout.addWidget(d['widget'])
         d['savename']='samplepower'
         d['fcns']=[P_fftIV, P_fftIfV, P_liaIV, P_liaIfV]
         d['parnames']=[['fftI', 'fftV'], ['fftI', 'fV'], ['liaI', 'liaV'], ['liaI', 'fV']]
         d['segdkeys']=[['WinFFT_current', 'WinFFT_voltage'], ['WinFFT_current', 'WinFFT_filteredvoltage'], ['LIAharmonics_current', 'LIAharmonics_voltage'], ['LIAharmonics_current', 'LIAharmonics_filteredvoltage']]
         d['postcombofcns']=[self.filterfill]*4
-        d['parcombofcns']=[[self.acvfilterfill, self.filterfill]]*4
+        d['parcombofcns']=[[self.acvfilterfill, self.filterfill]]*2+[[self.acvh1filterfill, self.filterfill]]*2
         d['slider'].setMaximum(len(d['parnames'])-1)
         self.pardlist+=[copy.copy(d)]
         QObject.connect(d['slider'], SIGNAL("sliderReleased()"), self.slidermoved2)
@@ -426,7 +429,7 @@ class SCrecipeDialog(QDialog):
         self.parLayout.addWidget(d['widget'])
         d['savename']='sampleheatrate'
         d['fcns']=[S_T]#, S_Tavesl]
-        d['parnames']=[['T']]#, ['dTdt']]
+        d['parnames']=[['dTdt']]
         d['segdkeys']=[['sampletemperature']]#, ['sampletemperature']]
         d['postcombofcns']=[self.filterfill]#, self.filterfill]
         d['parcombofcns']=[[self.derfilterfill]]#, [self.derfilterfill]]
@@ -446,14 +449,14 @@ class SCrecipeDialog(QDialog):
         self.pardlist+=[copy.copy(d)]
         QObject.connect(d['slider'], SIGNAL("sliderReleased()"), self.slidermoved4)
         
-        d=self.calclayoutgen('mCp', ['HeatCap'])
+        d=self.calclayoutgen('mCp', ['fft', 'fftfltr', 'lia', 'liafltr'])
         self.parLayout.addWidget(d['widget'])
         d['savename']='acheatcapacity'
         d['fcns']=[mCp_fftVIPdT, mCp_fftfVIPdT, mCp_liaVIPdT, mCp_liafVIPdT]
         d['parnames']=[['fftV', 'fftI', 'P', 'dT'], ['ffV', 'fftI', 'P', 'dT'], ['liaV', 'liaI', 'P', 'dT'], ['lfV', 'liaI', 'P', 'dT']]
         d['segdkeys']=[['WinFFT_voltage', 'WinFFT_current', 'samplepower', 'sampleheatrate'], ['WinFFT_filteredvoltage', 'WinFFT_current', 'samplepower', 'sampleheatrate'], ['LIAharmonics_voltage', 'LIAharmonics_filteredcurrent', 'samplepower', 'sampleheatrate'], ['LIAharmonics_filteredvoltage', 'LIAharmonics_filteredcurrent', 'samplepower', 'sampleheatrate']]
         d['postcombofcns']=[self.filterfill]*4
-        d['parcombofcns']=[[self.acvfilterfill, self.filterfill, self.filterfill, self.filterfill]]*4
+        d['parcombofcns']=[[self.acvfilterfill, self.filterfill, self.filterfill, self.filterfill]]*2+[[self.acvh1filterfill, self.filterfill, self.filterfill, self.filterfill]]*2
         d['slider'].setMaximum(len(d['parnames'])-1)
         self.pardlist+=[copy.copy(d)]
         QObject.connect(d['slider'], SIGNAL("sliderReleased()"), self.slidermoved5)
@@ -707,11 +710,11 @@ class SCrecipeDialog(QDialog):
                     {'name':'fit_c','fitpars':[1.e-6]}, \
                 ]
     
-    def dfltfilterdict(self, deriv=0):
+    def dfltfilterdict(self, deriv=0, SGnpts=40):
         return {'OLnpts':1, \
                 'OLnsig':1.5, \
                 'OLgappts':0, \
-                'SGnpts':40, \
+                'SGnpts':SGnpts, \
                 'SGorder':1, \
                 'SGderiv':deriv, \
                 'SGbin':0, \
@@ -726,12 +729,16 @@ class SCrecipeDialog(QDialog):
         'critcurve':None, 'pospeaks':1, 'negpeaks':1}
     
     def acfilterdflt(self):
-        return {'n1wcycles_window':10}#, 'harmonics':[0, 1, 2, 3]}
+        return {'n1wcycles_window':10, \
+                'n1wcycles_winstartinterval':1, \
+                'extrappolyorder':1, \
+                'interporder':1, \
+                }#, 'harmonics':[0, 1, 2, 3]}
 
-    def acvfilterdflt(self):
-        d=dfltfilterdict
+    def acvfilterdflt(self, h=0):
+        d=self.dfltfilterdict()
         d['SGnpts']=0
-        d['harmonic']=2
+        d['harmonic']=1
         return d
     
     def Nonefilterdict(self):
@@ -764,9 +771,11 @@ class SCrecipeDialog(QDialog):
                 else:
                     d[k]=type(dfltd[k])(v)
         
-    def calclayoutgen(self, varname, eqnames):
+    def calclayoutgen(self, varname, eqnames, ncalcs=5):
         gridLayoutWidget = QWidget()
-        gridLayoutWidget.setGeometry(QRect(55, 130, 430, 201))
+        #ht=min(201, 1000//ncalcs)
+        ht=201
+        gridLayoutWidget.setGeometry(QRect(55, 130, 430, ht))
         gridLayoutWidget.setObjectName("gridLayoutWidget")
         gridLayout = QGridLayout(gridLayoutWidget)
         gridLayout.setHorizontalSpacing(6)
@@ -906,6 +915,9 @@ class SCanalysisDialog(QDialog):
         self.buttonBox.setStandardButtons(QDialogButtonBox.Ok)
         QObject.connect(self.buttonBox, SIGNAL("accepted()"), self.accept)
         
+        self.plotCheckBox=QCheckBox()
+        self.plotCheckBox.setText('Plot in SC plot viewer')
+        self.plotCheckBox.setChecked(True)
         
         mainlayout=QGridLayout()
         
@@ -921,11 +933,12 @@ class SCanalysisDialog(QDialog):
         mainlayout.addWidget(recLabel, 2, 0)
         mainlayout.addWidget(self.recComboBox, 2, 1)
         mainlayout.addWidget(reccopyButton, 3, 0, 1, 2)
-        mainlayout.addWidget(calcallButton, 4, 0, 1, 2)
-        mainlayout.addWidget(self.buttonBox, 5, 1)
+        mainlayout.addWidget(self.plotCheckBox, 4, 0, 1, 2)
+        mainlayout.addWidget(calcallButton, 5, 0, 1, 2)
+        mainlayout.addWidget(self.buttonBox, 6, 1)
         self.setLayout(mainlayout)
         
-        self.setWindowTitle('SC analysis recipe editor')
+        self.setWindowTitle('batch SC analysis recipe control')
         self.plotdialog=None
         self.hpchanged()
         self.fillrecComboBox()
@@ -1052,7 +1065,7 @@ class SCanalysisDialog(QDialog):
                 self.plotdialog.activateWindow()
             elif 'CTpks_secder' in f.func_name:
                 print 'post-calc plotting skipped'
-            else:
+            elif self.plotCheckBox.isChecked():
                 if self.plotdialog is None:
                     self.plotdialog=analysisviewerDialog(None, hpsegdlist, hpname=h5hpname)
                     self.plotdialog.drawall()
@@ -1132,7 +1145,8 @@ class analysisviewerDialog(QDialog):
         ycbdflts=['samplecurrent', 'samplevoltage', 'sampletemperature', 'samplepower', 'sampleheatrate', 'samplepowerperrate']
         xcbdflts=['cycletime', 'cycletime', 'cycletime', 'cycletime', 'cycletime', 'sampletemperature']
         temp=len(self.segcalcoptions)-1
-        segdflt=[temp, temp, temp-1, temp-1, temp-1, temp-1]
+        dftlsegind=numpy.argmax([len([k for k in segd.keys() if isinstance(segd[k], numpy.ndarray)]) for segd in self.hpsegdlist])
+        segdflt=[temp, temp, dftlsegind, dftlsegind, dftlsegind, dftlsegind]
         for ploti, (d, yd, sd) in enumerate(zip(self.plotsdlist, ycbdflts, segdflt)):
             for count, nam in enumerate(self.segcalcnames):
                 d['segcb'].insertItem(count, nam)
@@ -1779,19 +1793,26 @@ def WinFFT(segd, fild, X, h5path, h5expname, h5hpname):
 
     (segkey, filkey)=X
     n=ptspercyc*fild[filkey]['n1wcycles_window']
+    argdict={}
+    argdict['npts_win']=n
+    argdict['nptswinstartinterval']=fild[filkey]['n1wcycles_winstartinterval']*ptspercyc
+    for k, v in fild[filkey].iteritems():
+        argdict[k]=v
     #for i in fild[filkey]['harmonics']:
     #ans=numpy.empty((segd[segkey].shape[0], segd[segkey].shape[1], n//2+1, 2), dtype='float32')
-    ans=numpy.empty((segd[segkey].shape[0], segd[segkey].shape[1], 10, 2), dtype='float32')
+    ans=numpy.empty((segd[segkey].shape[0], segd[segkey].shape[1], 11, 2), dtype='float32')
     
-    freq_1w=(numpy.array(range(n//2+1))/n)*ptspercyc
-    i2w=numpy.argmin((1.-freq_1w)**2)
-    i2w=numpy.argmin((2.-freq_1w)**2)
-    i3w=numpy.argmin((3.-freq_1w)**2)
-    saveinds=[0, i1w-1, i1w, i1w+1, i2w-1, i2w, i2w+1, i3w-1, i3w, i3w+1]
+    freq_wrt1w=(numpy.array(range(n//2+1), dtype='float32')/n)*ptspercyc
+    i1w=numpy.argmin((1.-freq_wrt1w)**2)
+    i2w=numpy.argmin((2.-freq_wrt1w)**2)
+    i3w=numpy.argmin((3.-freq_wrt1w)**2)
+    freqinds=[0, 1, i1w-1, i1w, i1w+1, i2w-1, i2w, i2w+1, i3w-1, i3w, i3w+1]
+    argdict['freqinds']=freqinds
     for i, arr in enumerate(segd[segkey]):
-        fftx, ffty=windowfft_xy(arr, n)
-        ans[i, :, :, 0]=fftx[saveinds]
-        ans[i, :, :, 1]=ffty[saveinds]
+        argdict['x']=arr
+        fftx, ffty=windowfft_xy(**dict([(k, v) for k, v in argdict.iteritems() if k in windowfft_xy.func_code.co_varnames[:windowfft_xy.func_code.co_argcount]]))
+        ans[i, :, :, 0]=fftx[:, :]
+        ans[i, :, :, 1]=ffty[:, :]
     return ans #makes array that is cycles x nptsinsegx 10 x2 , where the 10 are 0w,1w-,1w,1w+,2w-,2w,2w+,3w-,3w,3w+, the separation between neibhboring frequencies is daqHz/totnumptsinwindow or daqHz/(ptspercyc*n1wcycles_window).
 
 def LIAI(segd, fild, I, h5path, h5expname, h5hpname):
@@ -1804,32 +1825,39 @@ def LIAfV(segd, fild, fV, h5path, h5expname, h5hpname):
 def LIA(segd, fild, X, h5path, h5expname, h5hpname):
     ptspercyc=pts_sincycle_h5(h5path, h5expname, h5hpname)
     (segkey, filkey)=X
-    #hlist=fild[filkey]['harmonics']
+    
+    argdict={}
+    argdict['nptswinstartinterval']=fild[filkey]['n1wcycles_winstartinterval']*ptspercyc
+    for k, v in fild[filkey].iteritems():
+        argdict[k]=v
     hlist=[1, 2, 3]
     ans=numpy.empty((segd[segkey].shape[0], segd[segkey].shape[1], len(hlist), 2), dtype='float32')
     for i, arr in enumerate(segd[segkey]):
         for j, h in enumerate(hlist):
-            ans[i, :, j, 0], ans[i, :, j, 1]=lia_xy(arr, ptspercyc/h, ncyclewin=fild[filkey]['n1wcycles_window']*h)
+            argdict['ptspercyc']=ptspercyc/h
+            argdict['ncyclewin']=fild[filkey]['n1wcycles_window']*h
+            argdict['x']=arr
+            ans[i, :, j, 0], ans[i, :, j, 1]=lia_xy(**dict([(k, v) for k, v in argdict.iteritems() if k in lia_xy.func_code.co_varnames[:lia_xy.func_code.co_argcount]]))
             #ans[i, :, j, 0], ans[i, :, j, 1]=lia_ampphase(arr, ptspercyc/h, ncyclewin=fild[filkey]['n1wcycles_window']*h, phaseshift=0.)
     return ans #makes array that is cycles x nptsinsegxharmonic x 2for x,y
 
 def R_fftIV(segd, fild, fftI, fftV, h5path=None, h5expname=None, h5hpname=None):
     h=fild[fftI[1]]['harmonic']
-    freqind=h*3-1*(h>0)
+    freqind=h*3
     I=fftI+(segd[fftI[0]][:, :, freqind, 0],)
     V=fftV+(segd[fftV[0]][:, :, freqind, 0],)
     return R_IV(segd, fild, I, V, h5path=h5path, h5expname=h5expname, h5hpname=h5hpname)
 
 def T_fftIV(segd, fild, fftI, fftV, h5path, h5expname, h5hpname):
     h=fild[fftI[1]]['harmonic']
-    freqind=h*3-1*(h>0)
+    freqind=h*3
     I=fftI+(segd[fftI[0]][:, :, freqind, 0],)
     V=fftV+(segd[fftV[0]][:, :, freqind, 0],)
     return T_IV(segd, fild, I, V, h5path=h5path, h5expname=h5expname, h5hpname=h5hpname)
 
 def P_fftIV(segd, fild, fftI, fftV, h5path, h5expname, h5hpname):
     h=fild[fftI[1]]['harmonic']
-    freqind=h*3-1*(h>0)
+    freqind=h*3
     I=fftI+(segd[fftI[0]][:, :, freqind, 0],)
     V=fftV+(segd[fftV[0]][:, :, freqind, 0],)
     return P_IV(segd, fild, I, V, h5path=h5path, h5expname=h5expname, h5hpname=h5hpname)
@@ -1871,25 +1899,27 @@ def P_liaIfV(segd, fild, liaI, fV, h5path=None, h5expname=None, h5hpname=None):
 
 def mCp_fftVIPdT(segd, fild, fftV, fftI, P, dT, h5path, h5expname, h5hpname):
     h=fild[fftV[1]]['harmonic']
-    harmind=h*3-1*(h>0)
-    return mCp_gen(segd, fild, fftV, fftI, P, dT, h5path, h5expname, h5hpname, h, harmind)
+    harmind=h*3
+    harm01inds=[0, 3]
+    return mCp_gen(segd, fild, fftV, fftI, P, dT, h5path, h5expname, h5hpname, h, harmind, harm01inds=harm01inds)
 
-def mCp_ffVIPdT(segd, fild, ffV, fftI, P, dT, h5path, h5expname, h5hpname):
+def mCp_fftfVIPdT(segd, fild, ffV, fftI, P, dT, h5path, h5expname, h5hpname):
     h=fild[ffV[1]]['harmonic']
-    harmind=h*3-1*(h>0)
-    return mCp_gen(segd, fild, ffV, fftI, P, dT, h5path, h5expname, h5hpname, h, harmind, Vsrcisfiltered=True)
+    harmind=h*3
+    harm01inds=[0, 3]
+    return mCp_gen(segd, fild, ffV, fftI, P, dT, h5path, h5expname, h5hpname, h, harmind, harm01inds=harm01inds, Vsrcisfiltered=True)
     
 def mCp_liaVIPdT(segd, fild, liaV, liaI, P, dT, h5path, h5expname, h5hpname):
     h=fild[liaV[1]]['harmonic']
     harmind=h-1
     return mCp_gen(segd, fild, liaV, liaI, P, dT, h5path, h5expname, h5hpname, h, harmind)
 
-def mCp_lfVIPdT(segd, fild, lfV, liaI, P, dT, h5path, h5expname, h5hpname):
+def mCp_liafVIPdT(segd, fild, lfV, liaI, P, dT, h5path, h5expname, h5hpname):
     h=fild[lfV[1]]['harmonic']
     harmind=h-1
     return mCp_gen(segd, fild, lfV, liaI, P, dT, h5path, h5expname, h5hpname, h, harmind, Vsrcisfiltered=True)
     
-def mCp_gen(segd, fild, acV, acI, P, dT, h5path, h5expname, h5hpname, h, harmind, harm01inds, Vsrcisfiltered=False):#the I, dIdt, etc. should be tuples with a key for segd and then a key for fild
+def mCp_gen(segd, fild, acV, acI, P, dT, h5path, h5expname, h5hpname, h, harmind, harm01inds=None, Vsrcisfiltered=False):#the I, dIdt, etc. should be tuples with a key for segd and then a key for fild
     RoToAl=RoToAl_h5(h5path, h5expname, h5hpname)
     ppc=pts_sincycle_h5(h5path, h5expname, h5hpname)
     dt=dt_h5(h5path, h5expname, h5hpname)

@@ -139,7 +139,9 @@ class MainMenu(QMainWindow):
         self.action_getsegd=MainMenuQAction(self,'action_getsegd', 'send SegDict to data (select a heat program)', self.menuplot, [('h5open', [True]), ('selectiongrouptype', ['heatprogram'])], self.ActionDict)
         self.action_plotsegs=MainMenuQAction(self,'action_plotsegs', 'plot Segs by color (select a heat program)', self.menuplot, [('h5open', [True]), ('selectiongrouptype', ['heatprogram'])], self.ActionDict)
         self.action_viewSCanalysis=MainMenuQAction(self,'action_viewSCanalysis', 'SC data viewer (select a heat program)', self.menuplot, [('h5open', [True]), ('selectiongrouptype', ['heatprogram'])], self.ActionDict)
+        self.action_viewACharmanalysis=MainMenuQAction(self,'action_viewACharmanalysis', 'AC harmonics data viewer (select a heat program)', self.menuplot, [('h5open', [True]), ('selectiongrouptype', ['heatprogram'])], self.ActionDict)
         self.action_viewFit=MainMenuQAction(self,'action_viewFit', 'Fit data viewer (select a heat program)', self.menuplot, [('h5open', [True]), ('selectiongrouptype', ['heatprogram'])], self.ActionDict)
+        
         
         
         #setup a menu section
@@ -173,6 +175,8 @@ class MainMenu(QMainWindow):
         self.action_heatcaprecipe=MainMenuQAction(self,'action_heatcaprecipe', 'Build heat capacity recipe (select heat program)', self.anmenu, [('h5open', [True]),  ('selectiongrouptype', ['heatprogram']), ('samplepowerperrateexists', [True])], self.ActionDict)
         self.action_heatcappeaksrecipe=MainMenuQAction(self,'action_heatcappeaksrecipe', 'Build C(T) peak search+fit recipe (select heat program)', self.anmenu, [('h5open', [True]),  ('selectiongrouptype', ['heatprogram']), ('samplepowerperrateexists', [True])], self.ActionDict)
         self.action_acrecipe=MainMenuQAction(self,'action_acrecipe', 'Build AC freq analysis recipe (select heat program)', self.anmenu, [('h5open', [True]),  ('selectiongrouptype', ['heatprogram'])], self.ActionDict)
+        self.action_acheatcaprecipe=MainMenuQAction(self,'action_acheatcaprecipe', 'Build AC Cp analysis recipe (select heat program)', self.anmenu, [('h5open', [True]),  ('selectiongrouptype', ['heatprogram'])], self.ActionDict)
+        
         self.action_applyscrecipe=MainMenuQAction(self,'action_applyscrecipe', 'Apply SC analysis recipe (select experiment or heat program)', self.anmenu, [('h5open', [True]),  ('selectiongrouptype', ['experiment', 'heatprogram'])], self.ActionDict)
         
         self.setMenuBar(self.main_menu_pulldown)
@@ -712,6 +716,13 @@ class MainMenu(QMainWindow):
         idialog=analysisviewerDialog(self, self.data, pathlist[1])
         idialog.show()
     
+    
+    @pyqtSignature("")
+    def on_action_viewACharmanalysis_triggered(self):
+        pathlist=self.geth5selectionpath(liststyle=True)
+        idialog=acharmonicsDialog(self, self.h5path, pathlist[1], pathlist[4])
+        idialog.show()
+        
     @pyqtSignature("")
     def on_action_viewFit_triggered(self):
         pathlist=self.geth5selectionpath(liststyle=True)
@@ -778,6 +789,17 @@ class MainMenu(QMainWindow):
     def on_action_acrecipe_triggered(self):
         pathlist=self.geth5selectionpath(liststyle=True)
         idialog=SCrecipeDialog(self, self.h5path, pathlist[1], pathlist[4], calctype='AC')
+        idialog.show()
+        oldselection=self.geth5selectionpath(liststyle=True, removeformatting=False)
+        h5file=h5py.File(self.h5path, mode='r')
+        fillh5tree(self.treeWidget, h5file, selectionpathlist=oldselection, hpsortattr=str(self.sortattrLineEdit.text()))
+        h5file.close()
+        
+        
+    @pyqtSignature("")
+    def on_action_acheatcaprecipe_triggered(self):
+        pathlist=self.geth5selectionpath(liststyle=True)
+        idialog=SCrecipeDialog(self, self.h5path, pathlist[1], pathlist[4], calctype='AC_RTPSD')
         idialog.show()
         oldselection=self.geth5selectionpath(liststyle=True, removeformatting=False)
         h5file=h5py.File(self.h5path, mode='r')
