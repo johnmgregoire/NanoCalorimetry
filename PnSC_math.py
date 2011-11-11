@@ -762,7 +762,7 @@ def calcRofromheatprogram(I1, V1, I2, V2, RoToAl, o_R2poly=1):
 #Fv3(j)=v3f(j)-Xadd3(j)-1i*Yadd3(j);%-i3(j)*R0(j);
 #mc3(j)=lam*abs(i1(j))^3*R0(j)^2/8/abs(Fv3(j))/2/pi/fq_base; 
 
-def mCp_2w(VhX, VhY, I0X, I0Y, I1X, I1Y, IhX, IhY, dT, Ro, tcr, freq1w, Vsrcisfiltered=True,  returnall=False):
+def mCp_2w(VhX, VhY, I0X, I0Y, I1X, I1Y, IhX, IhY, dT, R, tcr, freq1w, Vsrcisfiltered=True,  returnall=False):
     V2=VhX+1j*VhY
     I1=I1X+1j*I1Y
     I0amp=numpy.sqrt(I0X**2+I0Y**2)
@@ -772,10 +772,10 @@ def mCp_2w(VhX, VhY, I0X, I0Y, I1X, I1Y, IhX, IhY, dT, Ro, tcr, freq1w, Vsrcisfi
     else:
         I2=IhX+1j*IhY
         phi0=-1.*numpy.angle(I1)
-        Xadd2=2.*numpy.abs(I1)*Ro*tcr*dT/3./angfreq1w*numpy.sin(phi0)
-        Yadd2=(3.*I0amp*Ro+4.*numpy.abs(I1)*Ro*numpy.cos(phi0))*tcr*dT/3./angfreq1w
-        F2=V2-Xadd2-1j*Yadd2-I2*Ro
-    mc=tcr*numpy.abs(I1)**2*I0amp*Ro**2*1.5/numpy.abs(F2)/angfreq1w
+        Xadd2=2.*numpy.abs(I1)*R*tcr*dT/3./angfreq1w*numpy.sin(phi0)
+        Yadd2=(3.*I0amp*R+4.*numpy.abs(I1)*R*numpy.cos(phi0))*tcr*dT/3./angfreq1w
+        F2=V2-Xadd2-1j*Yadd2-I2*R
+    mc=tcr*numpy.abs(I1)**2*I0amp*R**2*1.5/numpy.abs(F2)/angfreq1w
     if returnall:
         if Vsrcisfiltered:
             return angfreq1w, I0amp, I1, V2, F2, mc
@@ -784,7 +784,7 @@ def mCp_2w(VhX, VhY, I0X, I0Y, I1X, I1Y, IhX, IhY, dT, Ro, tcr, freq1w, Vsrcisfi
     else:
         return mc
     
-def mCp_3w(VhX, VhY, I0X, I0Y, I1X, I1Y, IhX, IhY, dT, Ro, tcr, freq1w, Vsrcisfiltered=True, returnall=False):
+def mCp_3w(VhX, VhY, I0X, I0Y, I1X, I1Y, IhX, IhY, dT, R, tcr, freq1w, Vsrcisfiltered=True, returnall=False):
     V3=VhX+1j*VhY
     I1=I1X+1j*I1Y
     angfreq1w=2.*numpy.pi*freq1w
@@ -795,11 +795,11 @@ def mCp_3w(VhX, VhY, I0X, I0Y, I1X, I1Y, IhX, IhY, dT, Ro, tcr, freq1w, Vsrcisfi
         I3=IhX+1j*IhY
         I0amp=numpy.sqrt(I0X**2+I0Y**2)
         phi0=-1.*numpy.angle(I1)
-        Xadd3=numpy.abs(I1)*Ro*tcr*dT/4./angfreq1w*numpy.sin(phi0)
-        Yadd3=(8.*I0amp*Ro+9.*numpy.abs(I1)*Ro*numpy.cos(phi0))*tcr*dT/12./angfreq1w
-        F3=V3-Xadd3-1j*Yadd3-I3*Ro
+        Xadd3=numpy.abs(I1)*R*tcr*dT/4./angfreq1w*numpy.sin(phi0)
+        Yadd3=(8.*I0amp*R+9.*numpy.abs(I1)*R*numpy.cos(phi0))*tcr*dT/12./angfreq1w
+        F3=V3-Xadd3-1j*Yadd3-I3*R
 
-    mc=tcr*numpy.abs(I1)**3*Ro**2/8./numpy.abs(F3)/angfreq1w
+    mc=tcr*numpy.abs(I1)**3*R**2/8./numpy.abs(F3)/angfreq1w
     if returnall:
         if Vsrcisfiltered:
             return angfreq1w, I1, V3, F3, mc
