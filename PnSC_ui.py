@@ -19,6 +19,16 @@ from PnSC_math import *
 from PnSC_h5io import *
 import PnSC_h5io as io
 
+from matplotlib.ticker import FuncFormatter
+
+def myexpformat(x, pos):
+    for ndigs in range(5):
+        lab=(('%.'+'%d' %ndigs+'e') %x).replace('e+0','e').replace('e+','e').replace('e0','').replace('e-0','e-')
+        if eval(lab)==x:
+            return lab
+    return lab
+ExpTickLabels=FuncFormatter(myexpformat)
+
 are_paths_equivalent=lambda path1, path2:os.path.normcase(os.path.abspath(path1))==os.path.normcase(os.path.abspath(path2))
     
 class messageDialog(QDialog):
@@ -197,12 +207,7 @@ class fillh5tree():
         else:
             s=myexpformat(num)
         return s
-def myexpformat(x, pos=0):
-    for ndigs in range(6):
-        lab=(('%.'+'%d' %ndigs+'e') %x).replace('e+0','e').replace('e+','e').replace('e0','')
-        if eval(lab)==x:
-            return lab
-    return lab
+
 class plotwidget(FigureCanvas):
     def __init__(self, parent, width=12, height=6, dpi=72):
 
@@ -1919,6 +1924,132 @@ class TwoPointResTableDialog(QDialog):
         for ra, isb, vsb in zip(resarr, self.iSpinBoxList, self.vSpinBoxList):
             isb.setValue(ra[0])
             vsb.setValue(ra[1])
+
+class acharmonicsDialog(QDialog):
+    def __init__(self, parent, h5path, h5expname, h5hpname, title='AC harmonics viewer', markersize=1):
+        super(acharmonicsDialog, self).__init__(parent)
+        
+        mainlayout=QGridLayout()
+        plotwlist=[]
+        for i in range(3):
+            for j in range(4):
+                plotw=plotwidget(self)
+                plotw.ax=plotw.axes
+                plotw.ax2=None
+                plotwlist+=[plotw]
+                mainlayout.addWidget(plotw, i, j)
+        
+        
+        hpsegdlist=CreateHeatProgSegDictList(h5path, h5expname, h5hpname)
+        
+        segindlist=[count for count, d in enumerate(hpsegdlist) if 'WinFFT_current' in d.keys()]
+        strlist=['segment %d : %s' %(count, hpsegdlist[count]['segmenttype']) for count in segindlist]
+        idialog=selectorDialog(self, strlist, title='Select segment to plot')
+        if not idialog.exec_():
+            return
+        d=hpsegdlist[segindlist[idialog.index]]
+        
+        strlist=[k.partition('WinFFT_')[2] for k in d.keys() if k.startswith('WinFFT_')]
+        idialog=selectorDialog(self, strlist, title='Select data type to plot')
+        if not idialog.exec_():
+            return
+        segk=idialog.name
+        fftsegk='WinFFT_'+segk
+        liasegk='LIAharmonics_'+segk
+        segk='sample'+segk
+        ppc=pts_sincycle_h5(h5path, h5expname, h5hpname)
+        x=numpy.array([0, .25, .5, .75, 1., 1.5, 2., 3., 4., 6., 8., 10., 15., 20., 50., 100.])*ppc
+        x=numpy.round(x)
+        x[x==0]=1
+        strlist=['%d' %v for v in x]
+        idialog=selectorDialog(self, strlist, title='Select plot point interval. %d pts in segment, %dppc' %(d['cycletime'].shape[1], ppc))
+        if not idialog.exec_():
+            return
+        interval=x[idialog.index]
+        indlist=range(0, d['cycletime'].shape[1], interval)
+        
+        if d['cycletime'].shape[0]>1:
+            strlist=['%d' %i for i in  range(d['cycletime'].shape[0])]
+            idialog=selectorDialog(self, strlist, title='Select cycle')
+            if not idialog.exec_():
+                return
+            cycind=idialog.index
+        else:
+            cycind=0
+            
+        fftlab=['0', '0+', '1w-', '1w', '1w+', '2w-', '2w', '2w+', '3w-', '3w', '3w+']
+        fftxyplot=[0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3]
+        fftphplot=[-1, -1, -1, 5, -1, -1, 6, -1, -1, 7, -1]
+        fftampplot=[-1, -1, 5, 5, 5, 6, 6, 6, 7, 7, 7]
+        fftcol=['r', 'g', 'b', 'r', 'g', 'b', 'r', 'g', 'b', 'r', 'g']
+        lialab=['lia1w', 'lia2w', 'lia3w']
+        liaxyplot=[9, 10, 11]
+        liaphplot=[-1, -1, -1]
+        liaampplot=[5, 6, 7]
+        liacol=['m', 'm', 'm']
+        
+        plotw=plotwlist[4]
+        plotw.ax.plot(indlist, d[segk][cycind][indlist], 'k-', label=segk, markersize=markersize)
+        
+        fftarr=d[fftsegk][cycind][indlist].swapaxes(0, 1)
+        for arr, l, xyp, php, ampp, c in zip(fftarr, fftlab, fftxyplot, fftphplot, fftampplot, fftcol):
+            if xyp>=0:
+                plotw=plotwlist[xyp]
+                plotw.ax.plot(indlist, arr[:, 0], c+'-', label=l+'X', markersize=markersize)
+                if plotw.ax2 is None:
+                    plotw.ax2=plotw.ax.twinx()
+                plotw.ax2.plot(indlist, arr[:, 1], c+':', label=l+'Y', markersize=markersize)
+
+            if php>=0:
+                plotw=plotwlist[php]
+                if plotw.ax2 is None:
+                    plotw.ax2=plotw.ax.twinx()
+                plotw.ax2.plot(indlist, numpy.arctan(arr[:, 1]/arr[:, 0]), c+':', label=l+r'$\phi$', markersize=markersize)
+            
+            if ampp>=0:
+                plotw=plotwlist[ampp]
+                plotw.ax.plot(indlist, numpy.sqrt(arr[:, 1]**2+arr[:, 0]**2), c+'-', label=l+'A', markersize=markersize)
+
+        liaarr=d[liasegk][cycind][indlist].swapaxes(0, 1)
+        for arr, l, xyp, php, ampp, c in zip(liaarr, lialab, liaxyplot, liaphplot, liaampplot, liacol):
+            if xyp>=0:
+                plotw=plotwlist[xyp]
+                plotw.ax.plot(indlist, arr[:, 0], c+'-', label=l+'X', markersize=markersize)
+                if plotw.ax2 is None:
+                    plotw.ax2=plotw.ax.twinx()
+                plotw.ax2.plot(indlist, arr[:, 1], c+':', label=l+'Y', markersize=markersize)
+
+            if php>=0:
+                plotw=plotwlist[php]
+                if plotw.ax2 is None:
+                    plotw.ax2=plotw.ax.twinx()
+                plotw.ax2.plot(indlist, numpy.arctan(arr[:, 1]/arr[:, 0]), c+':', label=l+r'$\phi$', markersize=markersize)
+            
+            if ampp>=0:
+                plotw=plotwlist[ampp]
+                plotw.ax.plot(indlist, numpy.sqrt(arr[:, 1]**2+arr[:, 0]**2), c+'--', label=l+'A', markersize=markersize)
+        
+        for plotw in plotwlist:
+            try:
+                leg=plotw.ax.legend(loc=2, frameon=False)
+                temp=[t.set_fontsize(12) for t in leg.texts]
+                plotw.ax.yaxis.set_major_formatter(ExpTickLabels)
+            except:
+                pass
+            if not plotw.ax2 is None:
+                try:
+                    leg=plotw.ax2.legend(loc=1, frameon=False)
+                    temp=[t.set_fontsize(12) for t in leg.texts]
+                    plotw.ax2.yaxis.set_major_formatter(ExpTickLabels)
+                except:
+                    pass
+
+        self.setLayout(mainlayout)
+
+        QMetaObject.connectSlotsByName(self)
+
+
+
 
 PinoutLibrary={\
 'xiaodong2010':numpy.array(\

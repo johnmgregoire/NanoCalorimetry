@@ -182,7 +182,7 @@ def msarr_hpgrp(h5hpgrp, twod=False):
 
 def segtypes():
     return ['step', 'soak', 'ramp', 'zero']
-def CreateHeatProgSegDictList(h5path, h5expname, h5hpname, critms_step=1., critmAperms_constmA=0.01, critdelmA_constmA=10., critmA_zero=0.1):
+def CreateHeatProgSegDictList(h5path, h5expname, h5hpname, critms_step=1., critmAperms_constmA=0.01, critdelmA_constmA=10., critmA_zero=0.1, expandmultdim=False):
 #the segment types are step, soak, ramp, zero
 #the CreateHeatProgSegDictList function reads the data from the .h5 file and organizes in a way that will be useful for many types of analysis. 
 #the function returns a list where there is one dict for each segment in the heat program. Each dict value that is an array is assumed to be data and all have the same shape
@@ -207,6 +207,8 @@ def CreateHeatProgSegDictList(h5path, h5expname, h5hpname, critms_step=1., critm
         else:
             d={'segmenttype':'ramp'}
             d['ramprate']=(mA1-mA0)/(ms1-ms0)
+        i0=indgen(ms0)
+        i1=indgen(ms1)
         iterpts=h5hpgrp.values()
         h5an=getcalanalysis(h5file, h5expname)
         #print h5hpname, h5hpname in h5an
@@ -216,18 +218,21 @@ def CreateHeatProgSegDictList(h5path, h5expname, h5hpname, critms_step=1., critm
         for pnt in iterpts:
             if isinstance(pnt, h5py.Dataset):
                 nam=pnt.name.rpartition('/')[2]
-                arr=pnt[:, :][:, indgen(ms0):indgen(ms1)]
-                #print nam, arr.shape, numpy.isnan(arr).sum()
-                if numpy.any(numpy.isnan(arr)):
-                    continue
-                d[nam]=arr
-                for key, val in pnt.attrs.iteritems():
-                    if 'unit' in key:
-                        d[nam]*=val
-        d['cycletime']=ms[:, indgen(ms0):indgen(ms1)]/1000.
+                if len(pnt.shape)==2 or (len(pnt.shape)>2 and not expandmultdim):
+                    arr=pnt[:, i0:i1]
+                    #print nam, arr.shape, numpy.isnan(arr).sum()
+                    if numpy.any(numpy.isnan(arr)):
+                        continue
+                    d[nam]=arr
+                    for key, val in pnt.attrs.iteritems():
+                        if 'unit' in key:
+                            d[nam]*=val
+                elif len(pnt.shape)>2 and expandmultdim and nam in multidimcreateseghandler.keys():
+                    multidimcreateseghandler[nam](eval('pnt[:, i0:i1'+',:'*(len(pnt.shape)-2)+']'), nam, d)
+        d['cycletime']=ms[:, i0:i1]/1000.
         d['segment_ms']=(ms0, ms1)
         d['segment_mA']=(mA0, mA1)
-        d['segment_inds']=(indgen(ms0), indgen(ms1))
+        d['segment_inds']=(i0, i1)
         d['segindex']=count
         dlist+=[copy.deepcopy(d)]
     h5hpgrp.file.close()
@@ -245,6 +250,29 @@ def extractcycle_SegDict(d, cycind):
 def piecetogethersegments(arrlist):
     cycles=arrlist[0].shape[0]
     return numpy.array([numpy.concatenate([arr[c] for arr in arrlist]) for c in range(cycles)], dtype=arrlist[0].dtype)
+
+def LIA_segdicthandler(arr, nam, d):
+    if numpy.any(numpy.isnan(arr)):
+        return
+    for i, h in enumerate(['1', '2', '3']):
+        d['%s_%sw_X' %(nam, h)]=arr[:, :, i, 0]
+        d['%s_%sw_Y' %(nam, h)]=arr[:, :, i, 1]
+
+def WinFFT_segdicthandler(arr, nam, d):
+    if numpy.any(numpy.isnan(arr)):
+        return
+    for i, h in enumerate(['0', '0+', '1w-', '1w', '1w+', '2w-', '2w', '2w+', '3w-', '3w', '3w+']):
+        d['%s_%sw_X' %(nam, h)]=arr[:, :, i, 0]
+        d['%s_%sw_Y' %(nam, h)]=arr[:, :, i, 1]
+
+multidimcreateseghandler={\
+    'LIAharmonics_current':LIA_segdicthandler, \
+    'LIAharmonics_filteredvoltage':LIA_segdicthandler, \
+    'LIAharmonics_voltage':LIA_segdicthandler, \
+    'WinFFT_current':WinFFT_segdicthandler, \
+    'WinFFT_filteredvoltage':WinFFT_segdicthandler, \
+    'WinFFT_voltage':WinFFT_segdicthandler, \
+    }
     
 def saveSCcalculations(h5path, h5expname, h5hpname, hpsegdlist, recname):
     h5file=h5py.File(h5path, mode='r+')

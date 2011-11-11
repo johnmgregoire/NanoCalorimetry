@@ -13,12 +13,44 @@ from PnSC_ui import *
 #        #print [(((numpy.append(arr[i0:i], arr[i+1:i1]).mean()-arr[i]))**2, (numpy.append(arr[i0:i], arr[i+1:i1]).std()*nsig)**2) for i, i0, i1 in zip(range(len(arr)), starti, stopi)][8]
 #        arr=numpy.array([(((numpy.append(arr[i0:i], arr[i+1:i1]).mean()-arr[i]))**2<(numpy.append(arr[i0:i], arr[i+1:i1]).std()*nsig)**2 and (arr[i],) or (numpy.append(arr[i0:i], arr[i+1:i1]).mean(),))[0] for i, i0, i1 in zip(range(len(arr)), starti, stopi)], dtype=arr.dtype)
 #    return arr
+
+def concat_extrap_ends(x, npts, polyorder=1, lowside=True, highside=True):
+    i=numpy.arange(npts, dtype='float64')
+    if lowside:
+        ans=scipy.polyfit(-1*(i+1.), x[:npts], polyorder)
+        x=numpy.concatenate([scipy.polyval(list(ans), i[::-1]), x])
+    if highside:
+        ans=scipy.polyfit(-1*(i[::-1]-1.), x[-1*npts:], polyorder)
+        x=numpy.concatenate([x, scipy.polyval(list(ans), i)])
+    return x    
+    
+def lininterpbetweenregularpoints(existy, interval):
+    existy=numpy.array(existy)
+    x=numpy.arange(interval,dtype='float32')/interval
+    diff=existy[1:]-existy[:-1]
+    o=numpy.outer(diff,x)
+    return numpy.concatenate([arr+start for arr,start in zip(o,existy[:-1])]+[existy[-1:]])
+    
+def interpwithinarr(existind, existy, order=3, interpplotax=None, interpcols=['k', 'r']):
+    if order==1:
+        existind=numpy.array(existind)
+        diff=existind[1:]-existind[:-1]
+        if numpy.all(diff==diff[0]):
+            return lininterpbetweenregularpoints(existy, diff[0])
+    interind=sorted(list(set(numpy.arange(max(existind)+1))-set(existind)))
+    yfull=numpy.zeros(max(existind)+1, existy.dtype)
+    yfull[existind]=existy[:]
+    yfull[interind]=scipy.interpolate.spline(existind, existy, interind, order=order)
+    if not interpplotax is None:
+        interpplotax.plot(existind, existy, interpcols[0])
+        interpplotax.plot(interind,  yfull[interind], interpcols[1])
+    return yfull
     
 def savgolsmooth(x, nptsoneside=7, order = 4, dx=1.0, deriv=0, binprior=0): #based on scipy cookbook. x is 1-d array, window is the number of points used to smooth the data, order is the order of the smoothing polynomial, will return the smoothed "deriv"th derivative of x
     if binprior>1:
         origlen=len(x)
         x=numpy.array([x[i*binprior:(i+1)*binprior].mean() for i in range(origlen//binprior)])
-    
+        dx*=binprior
     side=numpy.uint16(max(nptsoneside, numpy.ceil(order/2.)))
     s=numpy.r_[2*x[0]-x[side:0:-1],x,2*x[-1]-x[-2:-1*side-2:-1]]
     # a second order polynomal has 3 coefficients
@@ -417,6 +449,28 @@ def lia_ampphase(x, ptspercyc, ncyclewin=1., returnphase=True, pad=True, phasesh
         return amp, phase
     return amp
 
+def lia_xy(x, ptspercyc, ncyclewin=1., nptswinstartinterval=1, phaseshift=0., extrappolyorder=1, interporder=3, interpplotax=None):
+    npts=numpy.round(ptspercyc*ncyclewin)
+    s=x*sinarr(ptspercyc, x, ph=numpy.pi+phaseshift)
+    c=x*sinarr(ptspercyc, x, ph=numpy.pi/2.+phaseshift)
+    if nptswinstartinterval>1:
+        starti=range(0, len(x)-npts, nptswinstartinterval)
+    else:
+        starti=numpy.arange(len(x)-npts)
+    liax=(numpy.array([numpy.fft.fft(c[i:i+npts])[0].real for i in starti]))*2./npts
+    liay=(numpy.array([numpy.fft.fft(s[i:i+npts])[0].real for i in starti]))*2./npts
+    
+    if nptswinstartinterval>1:
+        liax=interpwithinarr(starti, liax, order=interporder, interpplotax=interpplotax, interpcols=['k', 'r'])
+        liay=interpwithinarr(starti, liay, order=interporder, interpplotax=interpplotax, interpcols=['g', 'y'])
+        
+    nptsextrap=npts//2
+    liax=concat_extrap_ends(liax, nptsextrap, highside=False, polyorder=extrappolyorder)
+    liay=concat_extrap_ends(liay, nptsextrap, highside=False, polyorder=extrappolyorder)
+    liax=concat_extrap_ends(liax, len(x)-len(liax), lowside=False, polyorder=extrappolyorder)
+    liay=concat_extrap_ends(liay, len(x)-len(liay), lowside=False, polyorder=extrappolyorder)
+    return liax, liay
+    
 def lia_ampphase2(x, ptspercyc, ncyclewin=1., returnphase=True, pad=True, phaseshift=0.):
     npts=numpy.round(ptspercyc*ncyclewin)
     s=x*sinarr(ptspercyc, x, ph=phaseshift)
@@ -467,9 +521,52 @@ def windowfft_ampphase(x, npts_win, pad=True, ptspercyc=None):
         amp=numpy.concatenate([amp[:npts_win//2], amp, amp[-1*(len(x)-len(amp)-npts_win//2):]])
         phase=numpy.concatenate([phase[:npts_win//2], phase, phase[-1*(len(x)-len(phase)-npts_win//2):]])
     return amp/npts_win, phase #frequencies are in units of daqHz and are  numpy.array(range(npts_win//2+1))/npts_win.
+
+    
+def windowfft_xy(x, npts_win, pad=True, ptspercyc=None, nptswinstartinterval=1, extrappolyorder=1, interporder=3, interpplotax=None, freqinds=None):
+    if freqinds is None:
+        freqinds=range(npts_win//2+1)
+    symmetryfactor=2.*numpy.ones(len(freqinds), dtype='float64')
+    symmetryfactor[numpy.where(numpy.array(freqinds)==0)]=1.
+    
+    if nptswinstartinterval>1:
+        starti=range(0, len(x)-npts_win, nptswinstartinterval)
+    else:
+        starti=numpy.arange(len(x)-npts_win)
+    print x.shape
+    comp=numpy.array([numpy.fft.fft(x[i:i+npts_win])[freqinds]*symmetryfactor for i in starti])
+    print comp.shape
+    fftx, ffty=numpy.array([[numpy.real(c), numpy.imag(c)] for c in comp]).swapaxes(0, 1).swapaxes(1, 2) #swapaxes makes X,Y first index and then frequencies  and then data points like that of x
+    print fftx.shape
+    fftx/=npts_win
+    ffty/=npts_win
+    
+    if nptswinstartinterval>1:
+        fftx=numpy.array([interpwithinarr(starti, a, order=interporder, interpplotax=interpplotax, interpcols=['k', 'r']) for a in fftx])
+        ffty=numpy.array([interpwithinarr(starti, a, order=interporder, interpplotax=interpplotax, interpcols=['g', 'y']) for a in ffty])
+        
+    nptsextrap=npts_win//2
+    print fftx.shape
+    fftx=numpy.array([concat_extrap_ends(a, nptsextrap, highside=False, polyorder=extrappolyorder) for a in fftx])
+    print nptsextrap,  fftx.shape
+    ffty=numpy.array([concat_extrap_ends(a, nptsextrap, highside=False, polyorder=extrappolyorder) for a in ffty])
+    fftx=numpy.array([concat_extrap_ends(a, len(x)-len(a), lowside=False, polyorder=extrappolyorder) for a in fftx])
+    print   len(x), len(x)-len(a),  fftx.shape
+    ffty=numpy.array([concat_extrap_ends(a, len(x)-len(a), lowside=False, polyorder=extrappolyorder) for a in ffty])
+    
+    return fftx.T, ffty.T #frequencies are second index and are in units of daqHz and are  numpy.array(range(npts_win//2+1))/npts_win, first index is same as x
     
 def performgenericfilter(arr, filterdict):#filterdict can contains unused key:val but it must contain all those necessary for a given filter step to be performed
-    arr=copy.copy(arr)
+    iterateoverlastdim=(arr.ndim>=3)
+    if iterateoverlastdim:
+        if arr.ndim>3:
+            origshape=arr.shape
+            arr=arr.reshape(origshape[:2]+(numpy.prod(origshape[2:]),))
+        else:
+            origshape=None
+        arrupdim=copy.copy(arr).swapaxes(1,2).swapaxes(0,1)
+    else:
+        arrupdim=numpy.array([copy.copy(arr)])
     fcn_parname_fkey_eachcycle=[\
     (removeoutliers_meanstd, ['nptsoneside', 'nsig', 'gapptsoneside'], ['OLnpts', 'OLnsig', 'OLgappts'], [], [], True), \
     (savgolsmooth, ['nptsoneside', 'order', 'deriv'], ['SGnpts', 'SGorder', 'SGderiv'], ['binprior'], ['SGbin'], True), \
@@ -482,14 +579,22 @@ def performgenericfilter(arr, filterdict):#filterdict can contains unused key:va
             continue
         parlist+=[(n, filterdict[k]) for n, k in zip(nlopt, klopt) if (k in filterdict and not filterdict[k] is None)] 
         print 'executing filter function ', f.func_name, dict(parlist)
-        print arr.shape
-        if eachcycle:
-            arr=numpy.array([f(a, **dict(parlist)) for a in arr])
+        for i in range(len(arrupdim)):
+            #print arrupdim[i].shape
+            if eachcycle:
+                arrupdim[i, :, :]=numpy.array([f(a, **dict(parlist)) for a in arrupdim[i]])
+            else:
+                arrupdim[i, :, :]=f(arrupdim[i], **dict(parlist))
+        
+    #arr2=removeoutliers_meanstd(arr2, nptsoneside=filterdict['OLnpts'], nsig=filterdict['OLnsig'], gapptsoneside=filterdict['OLgappts'])
+    #savgolsmooth(arr2, nptsoneside=filterdict['SGnpts'], order=filterdict['SGorder'], deriv=filterdict['SGderiv'])
+    if iterateoverlastdim:
+        if origshape is None:
+            return arrupdim.swapaxes(0,1).swapaxes(1,2)
         else:
-            arr=f(arr, **dict(parlist))
-    #arr=removeoutliers_meanstd(arr, nptsoneside=filterdict['OLnpts'], nsig=filterdict['OLnsig'], gapptsoneside=filterdict['OLgappts'])
-    #savgolsmooth(arr, nptsoneside=filterdict['SGnpts'], order=filterdict['SGorder'], deriv=filterdict['SGderiv'])
-    return arr
+            return arrupdim.swapaxes(0,1).swapaxes(1,2).reshape(origshape)
+    else:
+        return arrupdim[0]
 
 #def polyorder4_T(polycoefs, T):
 #    return numpy.array([polycoefs[i]*(x**i) for i in range(5)]).sum(axis=0)
@@ -635,3 +740,72 @@ def calcRofromheatprogram(I1, V1, I2, V2, RoToAl, o_R2poly=1):
     Ro=R12/(1.+RoToAl[2]*d['delT1'])
     d['calc_Ro']=Ro
     return Ro, d
+
+
+
+#Fs = 1/SAMPLINGPERIOD;                    % Sampling frequency
+# Fsmax=250e3; %maximum sampling rate: difference between neighbor I and V
+#T = 1/Fs;                     % Sample time
+#Ttotal=(length(U)-1)*T;            %total experiment time
+#fq_base=Fs/POINTSPERCYCLE; 
+#
+#phi0(j)=-angle(i1(j));  % phi0
+#
+#Xadd2(j)=2*abs(i1(j))*R0(j)*lam*yita(j)/6/pi/fq_base*sin(phi0(j));
+#Yadd2(j)=(3*abs(i0(j))*R0(j)+4*abs(i1(j))*R0(j)*cos(phi0(j)))*lam*yita(j)/3/2/pi/fq_base;
+#Fv2(j)=v2(j)-Xadd2(j)-1i*Yadd2(j)-i2(j)*R0(j);
+#
+#mc2(j)=lam*abs(i1(j))^2*i0(j)*R0(j)^2*3/2/abs(Fv2(j))/2/pi/fq_base;
+#
+#Xadd3(j)=abs(i1(j))*R0(j)*lam*yita(j)/4/2/pi/fq_base*sin(phi0(j));
+#Yadd3(j)=(8*abs(i0(j))*R0(j)+9*abs(i1(j))*R0(j)*cos(phi0(j)))*lam*yita(j)/12/2/pi/fq_base;
+#Fv3(j)=v3f(j)-Xadd3(j)-1i*Yadd3(j);%-i3(j)*R0(j);
+#mc3(j)=lam*abs(i1(j))^3*R0(j)^2/8/abs(Fv3(j))/2/pi/fq_base; 
+
+def mCp_2w(VhX, VhY, I0X, I0Y, I1X, I1Y, IhX, IhY, dT, Ro, tcr, freq1w, Vsrcisfiltered=True,  returnall=False):
+    V2=VhX+1j*VhY
+    I1=I1X+1j*I1Y
+    I0amp=numpy.sqrt(I0X**2+I0Y**2)
+    angfreq1w=2.*numpy.pi*freq1w
+    if Vsrcisfiltered:
+        F2=V2
+    else:
+        I2=IhX+1j*IhY
+        phi0=-1.*numpy.angle(I1)
+        Xadd2=2.*numpy.abs(I1)*Ro*tcr*dT/3./angfreq1w*numpy.sin(phi0)
+        Yadd2=(3.*I0amp*Ro+4.*numpy.abs(I1)*Ro*numpy.cos(phi0))*tcr*dT/3./angfreq1w
+        F2=V2-Xadd2-1j*Yadd2-I2*Ro
+    mc=tcr*numpy.abs(I1)**2*I0amp*Ro**2*1.5/numpy.abs(F2)/angfreq1w
+    if returnall:
+        if Vsrcisfiltered:
+            return angfreq1w, I0amp, I1, V2, F2, mc
+        else:
+            return angfreq1w, phi0, I0amp, I1, I2, V2, Xadd2, Yadd2, F2, mc
+    else:
+        return mc
+    
+def mCp_3w(VhX, VhY, I0X, I0Y, I1X, I1Y, IhX, IhY, dT, Ro, tcr, freq1w, Vsrcisfiltered=True, returnall=False):
+    V3=VhX+1j*VhY
+    I1=I1X+1j*I1Y
+    angfreq1w=2.*numpy.pi*freq1w
+    
+    if Vsrcisfiltered:
+        F3=V3
+    else:
+        I3=IhX+1j*IhY
+        I0amp=numpy.sqrt(I0X**2+I0Y**2)
+        phi0=-1.*numpy.angle(I1)
+        Xadd3=numpy.abs(I1)*Ro*tcr*dT/4./angfreq1w*numpy.sin(phi0)
+        Yadd3=(8.*I0amp*Ro+9.*numpy.abs(I1)*Ro*numpy.cos(phi0))*tcr*dT/12./angfreq1w
+        F3=V3-Xadd3-1j*Yadd3-I3*Ro
+
+    mc=tcr*numpy.abs(I1)**3*Ro**2/8./numpy.abs(F3)/angfreq1w
+    if returnall:
+        if Vsrcisfiltered:
+            return angfreq1w, I1, V3, F3, mc
+        else:
+            return angfreq1w, phi0, I0amp, I1, I3, V3, Xadd3, Yadd3, F3, mc
+    else:
+        return mc
+
+
