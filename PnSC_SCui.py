@@ -196,7 +196,7 @@ class SCrecipeDialog(QDialog):
         self.pardlist+=[copy.copy(d)]
         QObject.connect(d['slider'], SIGNAL("sliderReleased()"), self.slidermoved2)
         
-        d=self.calclayoutgen('S', ['(IdV-VdI)/dI2', 'dT/dt'])#, 'avedT/dt'])
+        d=self.calclayoutgen('S', ['dT/dt'])#, 'avedT/dt'])    '(IdV-VdI)/dI2', 
         self.parLayout.addWidget(d['widget'])
         d['savename']='sampleheatrate'
         d['fcns']=[S_T]#, S_Tavesl]     S_IV, 
@@ -208,7 +208,7 @@ class SCrecipeDialog(QDialog):
         self.pardlist+=[copy.copy(d)]
         QObject.connect(d['slider'], SIGNAL("sliderReleased()"), self.slidermoved3)
         
-        d=self.calclayoutgen('D', ['IVdI2/(IdV-VdI)', 'P/S'])
+        d=self.calclayoutgen('D', ['P/S']) #'IVdI2/(IdV-VdI)', 
         self.parLayout.addWidget(d['widget'])
         d['savename']='samplepowerperrate'
         d['fcns']=[D_PS]#D_IV, 
@@ -396,7 +396,7 @@ class SCrecipeDialog(QDialog):
         d['parnames']=[['fftI', 'fftV'], ['fftI', 'fV'], ['liaI', 'liaV'], ['liaI', 'fV']]
         d['segdkeys']=[['WinFFT_current', 'WinFFT_voltage'], ['WinFFT_current', 'WinFFT_filteredvoltage'], ['LIAharmonics_current', 'LIAharmonics_voltage'], ['LIAharmonics_current', 'LIAharmonics_filteredvoltage']]
         d['postcombofcns']=[self.filterfill]*4
-        d['parcombofcns']=[[self.acvfilterfill, self.filterfill]]*2+[[self.acvh1filterfill, self.filterfill]]*2
+        d['parcombofcns']=[[self.acvh01filterfill, self.filterfill]]*4
         d['slider'].setMaximum(len(d['parnames'])-1)
         self.pardlist+=[copy.copy(d)]
         QObject.connect(d['slider'], SIGNAL("sliderReleased()"), self.slidermoved0)
@@ -408,7 +408,7 @@ class SCrecipeDialog(QDialog):
         d['parnames']=[['fftI', 'fftV'], ['fftI', 'fV'], ['liaI', 'liaV'], ['liaI', 'fV']]
         d['segdkeys']=[['WinFFT_current', 'WinFFT_voltage'], ['WinFFT_current', 'WinFFT_filteredvoltage'], ['LIAharmonics_current', 'LIAharmonics_voltage'], ['LIAharmonics_current', 'LIAharmonics_filteredvoltage']]
         d['postcombofcns']=[self.filterfill]*4
-        d['parcombofcns']=[[self.acvfilterfill, self.filterfill]]*2+[[self.acvh1filterfill, self.filterfill]]*2
+        d['parcombofcns']=[[self.acvh01filterfill, self.filterfill]]*4
         d['slider'].setMaximum(len(d['parnames'])-1)
         self.pardlist+=[copy.copy(d)]
         QObject.connect(d['slider'], SIGNAL("sliderReleased()"), self.slidermoved1)
@@ -420,7 +420,7 @@ class SCrecipeDialog(QDialog):
         d['parnames']=[['fftI', 'fftV'], ['fftI', 'fV'], ['liaI', 'liaV'], ['liaI', 'fV']]
         d['segdkeys']=[['WinFFT_current', 'WinFFT_voltage'], ['WinFFT_current', 'WinFFT_filteredvoltage'], ['LIAharmonics_current', 'LIAharmonics_voltage'], ['LIAharmonics_current', 'LIAharmonics_filteredvoltage']]
         d['postcombofcns']=[self.filterfill]*4
-        d['parcombofcns']=[[self.acvfilterfill, self.filterfill]]*2+[[self.acvh1filterfill, self.filterfill]]*2
+        d['parcombofcns']=[[self.acvh01filterfill, self.filterfill]]*4
         d['slider'].setMaximum(len(d['parnames'])-1)
         self.pardlist+=[copy.copy(d)]
         QObject.connect(d['slider'], SIGNAL("sliderReleased()"), self.slidermoved2)
@@ -456,7 +456,7 @@ class SCrecipeDialog(QDialog):
         d['parnames']=[['fftV', 'fftI', 'P', 'dT'], ['ffV', 'fftI', 'P', 'dT'], ['liaV', 'liaI', 'P', 'dT'], ['lfV', 'liaI', 'P', 'dT']]
         d['segdkeys']=[['WinFFT_voltage', 'WinFFT_current', 'samplepower', 'sampleheatrate'], ['WinFFT_filteredvoltage', 'WinFFT_current', 'samplepower', 'sampleheatrate'], ['LIAharmonics_voltage', 'LIAharmonics_filteredcurrent', 'samplepower', 'sampleheatrate'], ['LIAharmonics_filteredvoltage', 'LIAharmonics_filteredcurrent', 'samplepower', 'sampleheatrate']]
         d['postcombofcns']=[self.filterfill]*4
-        d['parcombofcns']=[[self.acvfilterfill, self.filterfill, self.filterfill, self.filterfill]]*2+[[self.acvh1filterfill, self.filterfill, self.filterfill, self.filterfill]]*2
+        d['parcombofcns']=[[self.acvfilterfill, self.filterfill, self.filterfill, self.filterfill]]*2+[[self.acvh01filterfill, self.filterfill, self.filterfill, self.filterfill]]+[[self.acvh013filterfill, self.filterfill, self.filterfill, self.filterfill]]
         d['slider'].setMaximum(len(d['parnames'])-1)
         self.pardlist+=[copy.copy(d)]
         QObject.connect(d['slider'], SIGNAL("sliderReleased()"), self.slidermoved5)
@@ -649,7 +649,7 @@ class SCrecipeDialog(QDialog):
             self.filterComboBox.insertItem(counter, nam)
         self.updateparwidgets()
         
-    def filterfill(self, cb, deriv=0, reqkeys=[]):
+    def filterfill(self, cb, deriv=0, harmonic=[0, 1, 2, 3], reqkeys=[]):
         dfltnam=str(cb.currentText())
         if dfltnam=='':
             dfltnam='None'
@@ -660,6 +660,8 @@ class SCrecipeDialog(QDialog):
             if False in [k in d.keys() for k in reqkeys]:
                 continue
             if ('SGderiv' in d.keys() and d['SGderiv']!=deriv) or (deriv>0 and not 'SGderiv' in d.keys()):
+                continue
+            if ('harmonic' in d.keys() and not d['harmonic'] in harmonic):
                 continue
             cb.insertItem(counter, nam)
             if nam==dfltnam:
@@ -701,6 +703,15 @@ class SCrecipeDialog(QDialog):
     
     def acvfilterfill(self, cb):
         self.filterfill(cb, reqkeys=['harmonic'])
+
+    def acvh01filterfill(self, cb):
+        self.filterfill(cb, harmonic=[0, 1], reqkeys=['harmonic'])
+
+    def acvh013filterfill(self, cb):
+        self.filterfill(cb, harmonic=[0, 1, 3], reqkeys=['harmonic'])
+        
+    def acvh1filterfill(self, cb):
+        self.filterfill(cb, harmonic=[1], reqkeys=['harmonic'])
         
     def dfltfitfilterdicts(self, deriv=0):
         return [{'name':'timepart', 'numpartitions':1}, #contants and any other piecewise parameters have this many segments and these starting values\
@@ -738,7 +749,7 @@ class SCrecipeDialog(QDialog):
     def acvfilterdflt(self, h=0):
         d=self.dfltfilterdict()
         d['SGnpts']=0
-        d['harmonic']=1
+        d['harmonic']=h
         return d
     
     def Nonefilterdict(self):
@@ -1947,7 +1958,7 @@ def mCp_gen(segd, fild, acV, acI, P, dT, h5path, h5expname, h5hpname, h, harmind
     acI_=segd['~'.join(acI[:2])]
     #P_=segd['~'.join(P[:2])]
     dT_=segd['~'.join(dT[:2])]
-    inds=numpy.where(acV_[:, :, 0]<=0.)# these 3 lines will effectively remove neg and inf Res and replace them with the res value of the nearest acceptable value. These modification will no be reflected in the segd values for the source data
+    inds=numpy.where((acV_[:, :, 0]==0.)&(acV_[:, :, 1]==0.))# these 3 lines will effectively remove neg and inf Res and replace them with the res value of the nearest acceptable value. These modification will no be reflected in the segd values for the source data
     if len(inds[0])>0:
         acV_[:, :, 0]=replacevalswithneighsin2nddim(acV_[:, :, 0], inds)
         acV_[:, :, 1]=replacevalswithneighsin2nddim(acV_[:, :, 1], inds)
@@ -1956,21 +1967,21 @@ def mCp_gen(segd, fild, acV, acI, P, dT, h5path, h5expname, h5hpname, h, harmind
         #P_=replacevalswithneighsin2nddim(P_, inds)
         #dT_=replacevalswithneighsin2nddim(dT_, inds)
     mCpargdict={}
-    mCpargdict['VX']=acV_[:, :, 0]
-    mCpargdict['VY']=acV_[:, :, 1]
+    mCpargdict['VhX']=acV_[:, :, 0]
+    mCpargdict['VhY']=acV_[:, :, 1]
     mCpargdict['I0X']=acI_[:, :, 0, 0]
     mCpargdict['I0Y']=acI_[:, :, 0, 1]
     mCpargdict['I1X']=acI_[:, :, 1, 0]
     mCpargdict['I1Y']=acI_[:, :, 1, 1]
-    mCpargdict['IX']=acI_[:, :, 2, 0]
-    mCpargdict['IY']=acI_[:, :, 2, 1]
+    mCpargdict['IhX']=acI_[:, :, 2, 0]
+    mCpargdict['IhY']=acI_[:, :, 2, 1]
     #mCpargdict['P']=P_
     mCpargdict['dT']=dT_
     mCpargdict['Ro']=RoToAl[0]
     mCpargdict['tcr']=RoToAl[2]
     mCpargdict['freq1w']=freq1w
     mCpargdict['Vsrcisfiltered']=Vsrcisfiltered
-    return mCpfcn([(k, v) for k, v in mCpargdict.itervalues() if k in f.func_code.co_varnames[:f.func_code.co_argcount]])
+    return mCpfcn(**dict([(k, v) for k, v in mCpargdict.iteritems() if k in mCpfcn.func_code.co_varnames[:mCpfcn.func_code.co_argcount]]))
 
 
 #p='C:/Users/JohnnyG/Documents/PythonCode/Vlassak/NanoCalorimetry/Nanocopeia1_PnSC.h5'

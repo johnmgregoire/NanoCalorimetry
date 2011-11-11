@@ -50,7 +50,7 @@ def savgolsmooth(x, nptsoneside=7, order = 4, dx=1.0, deriv=0, binprior=0): #bas
     if binprior>1:
         origlen=len(x)
         x=numpy.array([x[i*binprior:(i+1)*binprior].mean() for i in range(origlen//binprior)])
-    
+        dx*=binprior
     side=numpy.uint16(max(nptsoneside, numpy.ceil(order/2.)))
     s=numpy.r_[2*x[0]-x[side:0:-1],x,2*x[-1]-x[-2:-1*side-2:-1]]
     # a second order polynomal has 3 coefficients
@@ -764,39 +764,47 @@ def calcRofromheatprogram(I1, V1, I2, V2, RoToAl, o_R2poly=1):
 
 def mCp_2w(VhX, VhY, I0X, I0Y, I1X, I1Y, IhX, IhY, dT, Ro, tcr, freq1w, Vsrcisfiltered=True,  returnall=False):
     V2=VhX+1j*VhY
-    I2=IhX+1j*IhY
     I1=I1X+1j*I1Y
     I0amp=numpy.sqrt(I0X**2+I0Y**2)
-    phi0=-1.*numpy.angle(I1)
     angfreq1w=2.*numpy.pi*freq1w
-    Xadd2=2.*numpy.abs(I1)*Ro*tcr*dT/3./angfreq1w*numpy.sin(phi0)
-    Yadd2=(3.*I0amp*Ro+4.*numpy.abs(I1)*Ro*numpy.cos(phi0))*tcr*dT/3./angfreq1w
     if Vsrcisfiltered:
         F2=V2
     else:
+        I2=IhX+1j*IhY
+        phi0=-1.*numpy.angle(I1)
+        Xadd2=2.*numpy.abs(I1)*Ro*tcr*dT/3./angfreq1w*numpy.sin(phi0)
+        Yadd2=(3.*I0amp*Ro+4.*numpy.abs(I1)*Ro*numpy.cos(phi0))*tcr*dT/3./angfreq1w
         F2=V2-Xadd2-1j*Yadd2-I2*Ro
     mc=tcr*numpy.abs(I1)**2*I0amp*Ro**2*1.5/numpy.abs(F2)/angfreq1w
     if returnall:
-        return angfreq1w, phi0, I0amp, I1, I2, V2, Xadd2, Yadd2, F2, mc
+        if Vsrcisfiltered:
+            return angfreq1w, I0amp, I1, V2, F2, mc
+        else:
+            return angfreq1w, phi0, I0amp, I1, I2, V2, Xadd2, Yadd2, F2, mc
     else:
         return mc
     
 def mCp_3w(VhX, VhY, I0X, I0Y, I1X, I1Y, IhX, IhY, dT, Ro, tcr, freq1w, Vsrcisfiltered=True, returnall=False):
     V3=VhX+1j*VhY
-    I3=IhX+1j*IhY
     I1=I1X+1j*I1Y
-    I0amp=numpy.sqrt(I0X**2+I0Y**2)
-    phi0=-1.*numpy.angle(I1)
     angfreq1w=2.*numpy.pi*freq1w
-    Xadd3=numpy.abs(I1)*Ro*tcr*dT/4./angfreq1w*numpy.sin(phi0)
-    Yadd3=(8.*I0amp*Ro+9.*numpy.abs(I1)*Ro*numpy.cos(phi0))*tcr*dT/12./angfreq1w
+    
     if Vsrcisfiltered:
         F3=V3
     else:
+        I3=IhX+1j*IhY
+        I0amp=numpy.sqrt(I0X**2+I0Y**2)
+        phi0=-1.*numpy.angle(I1)
+        Xadd3=numpy.abs(I1)*Ro*tcr*dT/4./angfreq1w*numpy.sin(phi0)
+        Yadd3=(8.*I0amp*Ro+9.*numpy.abs(I1)*Ro*numpy.cos(phi0))*tcr*dT/12./angfreq1w
         F3=V3-Xadd3-1j*Yadd3-I3*Ro
+
     mc=tcr*numpy.abs(I1)**3*Ro**2/8./numpy.abs(F3)/angfreq1w
     if returnall:
-        return angfreq1w, phi0, I0amp, I1, I3, V3, Xadd3, Yadd3, F3, mc
+        if Vsrcisfiltered:
+            return angfreq1w, I1, V3, F3, mc
+        else:
+            return angfreq1w, phi0, I0amp, I1, I3, V3, Xadd3, Yadd3, F3, mc
     else:
         return mc
 
