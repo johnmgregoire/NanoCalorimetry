@@ -9,7 +9,8 @@ fnxrd_fnpnsc=[
 #('2011Jun01A_ZrCuAl_heat0.dat.h5', '2011Jun01a.h5', ['ZrCuAlheat1', 'ZrCuAlheat2', 'ZrCuAlheat3', 'ZrCuAlheat4', 'ZrCuAlheat5']), \
 #('2011Jun01B.dat.h5', '2011Jun01b.h5'), \
 #('2011Oct02D_AuSiCu.dat.h5', '2011Oct02D_AuSiCu.h5', ['AuSiCuheats']), \
-#('2011Oct02D_InSnBi.dat.h5', '2011Oct02D_BiInSn.h5', ['Bi_DCheats', 'Bi_ACheats', 'In_DCheats', 'In_ACheats', 'Sn_DCheats', 'Sn_ACheats']), \
+('2011Oct02D_InSnBi.dat.h5', '2011Oct02D_BiInSn.h5', ['Bi_DCheats', 'Bi_ACheats', 'In_DCheats', 'In_ACheats', 'Sn_DCheats', 'Sn_ACheats']), \
+#('2011Oct02D_InSnBi.dat.h5', '2011Oct02D_BiInSn.h5', ['Bi_ACheats']), \
 #('2011Oct10B.dat.h5', '2011Oct10B_NiTiHf.h5', ['NiTiHfheat1', 'NiTiHfheat2', 'NiTiHfheat3', 'NiTiHfheat1_MA', 'NiTiHfheat2_MA', 'NiTiHfheat3_MA']), \
 #('2011Oct10B_FeNi.dat.h5', '2011Oct10B_FeNi.h5', ['DCheats', 'ACheats']), \
 #('2011Oct10C.dat.h5', '2011Oct10C.h5', ['borides']), \
@@ -18,14 +19,17 @@ fnxrd_fnpnsc=[
 #('nosampleconfigurations.dat.h5', serp), \
 ]
 
-savebool=1
-predeleteattrs=1
+savebool=0
+predeleteattrs=0
 x=[]
 y=[]
 for fnx, fn, expgrplist in fnxrd_fnpnsc:
     if not fn.endswith('.h5'):
         continue
-    f=h5py.File(os.path.join(p, fn), mode='r+')
+    if savebool or predeleteattrs:
+        f=h5py.File(os.path.join(p, fn), mode='r+')
+    else:
+        f=h5py.File(os.path.join(p, fn), mode='r')
     hppnt_epoch=[]
     #for node in f['Calorimetry'].values():
     for expgrp in expgrplist:
@@ -58,7 +62,7 @@ for fnx, fn, expgrplist in fnxrd_fnpnsc:
             for ep, c in zip(node2[:], node3[:]):
                 specname_ep_cell_insitu+=[(node.name.rpartition('/')[2], ep, c, 0)]
         elif len(node3)>1 and node.attrs['acquisition_command'].startswith('tseries 1'):
-            specname_ep_cell_insitu+=[(node.name.rpartition('/')[2], node2.value, node3[0], 1)]
+            specname_ep_cell_insitu+=[(node.name.rpartition('/')[2], node2[0], node3[0], 1)]
         else:
             try:
                 ep=node2[0]
@@ -81,7 +85,7 @@ for fnx, fn, expgrplist in fnxrd_fnpnsc:
                 print 'cannot find match for insitu spec %s. The closest is %s which occured %ds later' %(sp, pnt.name.rpartition('/')[2], diff)
                 continue
             elif csp!=c:
-                print 'in situ spec %s match time with %s but spec says cell %d and onsc says cell %d' %(sp, pnt.name.rpartition('/')[2], csp, c)
+                print 'in situ spec %s match time with %s but spec says cell %d and pnsc says cell %d' %(sp, pnt.name.rpartition('/')[2], csp, c)
                 continue
             print 'insitu spec %s with %s' %(sp, pnt.name.rpartition('/')[2])
             if savebool:
