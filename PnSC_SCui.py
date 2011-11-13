@@ -21,13 +21,17 @@ from PnSC_h5io import *
 
 
 class SCrecipeDialog(QDialog):
-    def __init__(self, parent, h5path, h5expname, h5hpname, calctype='RTPSD', par=None):
+    def __init__(self, parent, h5path, h5expname, h5hpname=None, calctype='RTPSD', par=None):
         super(SCrecipeDialog, self).__init__(parent)
         self.parent=parent
         self.h5path=h5path
         self.h5expname=h5expname
         self.h5hpname=h5hpname
-        self.hpsegdlist=CreateHeatProgSegDictList(h5path, h5expname, h5hpname)
+        if None in [h5path, h5expname, h5hpname]:
+            self.hpsegdlist=None
+        else:
+            self.hpsegdlist=CreateHeatProgSegDictList(h5path, h5expname, h5hpname)
+        
         
         self.calctype=calctype
         
@@ -64,6 +68,12 @@ class SCrecipeDialog(QDialog):
             self.filterd['ac_harm2']=self.acvfilterdflt(2)
             self.filterd['dflt']=self.dfltfilterdict(deriv=0)
             self.filterd['dt_dflt']=self.dfltfilterdict(deriv=1, SGnpts=70)
+        elif self.calctype=='AC_mCpall':
+            ncalcs=self.AC_mCpallsetup()
+            self.filterd['ac_harm1']=self.acvfilterdflt(1)
+            self.filterd['ac_harm2']=self.acvfilterdflt(2)
+            self.filterd['dflt']=self.dfltfilterdict(deriv=0)
+            self.filterd['dt_dflt']=self.dfltfilterdict(deriv=1, SGnpts=70)
         #*****************************************************
         importfiltersButton=QPushButton()
         importfiltersButton.setText("import filters\n(overwrites if same name)")
@@ -86,12 +96,12 @@ class SCrecipeDialog(QDialog):
         segLabel=QLabel()
         segLabel.setText('select segment(s)\nfor calculation')
         self.segcalcoptions=[]
-        for count, d in enumerate(self.hpsegdlist):
-            if d['segmenttype'] in ['ramp', 'soak']:
-                self.segComboBox.insertItem(len(self.segcalcoptions), 'segment %d : %s' %(count, d['segmenttype']))
-                self.segcalcoptions+=[numpy.array([count])]
-        self.segComboBox.insertItem(len(self.segcalcoptions), 'all ramp+soak')
-        self.segcalcoptions+=[numpy.concatenate(self.segcalcoptions)]
+#        for count, d in enumerate(self.hpsegdlist):
+#            if d['segmenttype'] in ['ramp', 'soak']:
+#                self.segComboBox.insertItem(len(self.segcalcoptions), 'segment %d : %s' %(count, d['segmenttype']))
+#                self.segcalcoptions+=[numpy.array([count])]
+#        self.segComboBox.insertItem(len(self.segcalcoptions), 'all ramp+soak')
+#        self.segcalcoptions+=[numpy.concatenate(self.segcalcoptions)]
         
         calcallButton=QPushButton()
         calcallButton.setText("Calculate all quantities")
@@ -131,9 +141,9 @@ class SCrecipeDialog(QDialog):
         rightlayout=QGridLayout()
         rightlayout.addWidget(savefiltersButton, 2, 0, 1, 2)
         rightlayout.addWidget(saveSCrecipeButton, 3, 0, 1, 2)
-        rightlayout.addWidget(calcallButton, 1, 0, 1, 2)
-        rightlayout.addWidget(segLabel, 0, 0)
-        rightlayout.addWidget(self.segComboBox, 0, 1)
+        #rightlayout.addWidget(calcallButton, 1, 0, 1, 2)
+        #rightlayout.addWidget(segLabel, 0, 0)
+        #rightlayout.addWidget(self.segComboBox, 0, 1)
         rightlayout.addWidget(recLabel, 4, 0)
         rightlayout.addWidget(self.recLineEdit, 4, 1)
         mainlayout.addLayout(rightlayout, 1, 2, 4, 2)
@@ -141,7 +151,8 @@ class SCrecipeDialog(QDialog):
         mainlayout.addLayout(self.parLayout, 0, 5, ncalcs*4, 5)
         self.saveCheckBox=QCheckBox()
         self.saveCheckBox.setText('save calculations upon close')
-        mainlayout.addWidget(self.saveCheckBox, 5, 0, 1, 2)
+        self.saveCheckBox.setChecked(False)
+        #mainlayout.addWidget(self.saveCheckBox, 5, 0, 1, 2)
         mainlayout.addWidget(self.buttonBox, 5, 2, 1, 2)
         self.setLayout(mainlayout)
         
@@ -452,7 +463,7 @@ class SCrecipeDialog(QDialog):
         d=self.calclayoutgen('mCp', ['fft', 'fftfltr', 'lia', 'liafltr'])
         self.parLayout.addWidget(d['widget'])
         d['savename']='acheatcapacity'
-        d['fcns']=[mCp_fftVIPdT, mCp_fftfVIPdT, mCp_liaVIPdT, mCp_liafVIPdT]
+        d['fcns']=[mCp_fftVIRdT, mCp_fftfVIRdT, mCp_liaVIRdT, mCp_liafVIRdT]
         d['parnames']=[['fftV', 'fftI', 'R', 'dT'], ['ffV', 'fftI', 'R', 'dT'], ['liaV', 'liaI', 'R', 'dT'], ['lfV', 'liaI', 'R', 'dT']]
         d['segdkeys']=[['WinFFT_voltage', 'WinFFT_current', 'sampleresistance', 'sampleheatrate'], ['WinFFT_filteredvoltage', 'WinFFT_current', 'sampleresistance', 'sampleheatrate'], ['LIAharmonics_voltage', 'LIAharmonics_filteredcurrent', 'sampleresistance', 'sampleheatrate'], ['LIAharmonics_filteredvoltage', 'LIAharmonics_filteredcurrent', 'sampleresistance', 'sampleheatrate']]
         d['postcombofcns']=[self.filterfill]*4
@@ -462,6 +473,57 @@ class SCrecipeDialog(QDialog):
         QObject.connect(d['slider'], SIGNAL("sliderReleased()"), self.slidermoved5)
         
         return 6
+    
+    def AC_mCpallsetup(self):
+        d=self.calclayoutgen('mCp1', ['None','fft', 'fftfltr', 'lia', 'liafltr'])
+        self.parLayout.addWidget(d['widget'])
+        d['savename']='acheatcapacity_1'
+        d['fcns']=[None, mCp_fftVIRdT1, mCp_fftfVIRdT1, mCp_liaVIRdT1, mCp_liafVIRdT1]
+        d['parnames']=[[], ['fftV', 'fftI', 'R', 'dT'], ['ffV', 'fftI', 'R', 'dT'], ['liaV', 'liaI', 'R', 'dT'], ['lfV', 'liaI', 'R', 'dT']]
+        d['segdkeys']=[[], ['WinFFT_voltage', 'WinFFT_current', 'sampleresistance', 'sampleheatrate'], ['WinFFT_filteredvoltage', 'WinFFT_current', 'sampleresistance', 'sampleheatrate'], ['LIAharmonics_voltage', 'LIAharmonics_filteredcurrent', 'sampleresistance', 'sampleheatrate'], ['LIAharmonics_filteredvoltage', 'LIAharmonics_filteredcurrent', 'sampleresistance', 'sampleheatrate']]
+        d['postcombofcns']=[self.nofilterfill]+[self.filterfill]*4
+        d['parcombofcns']=[[]]+[[self.acvh23filterfill, self.filterfill, self.filterfill, self.filterfill]]*2+[[self.acvh3filterfill, self.filterfill, self.filterfill, self.filterfill]]*2
+        d['slider'].setMaximum(len(d['parnames'])-1)
+        self.pardlist+=[copy.copy(d)]
+        QObject.connect(d['slider'], SIGNAL("sliderReleased()"), self.slidermoved0)
+        
+        d=self.calclayoutgen('mCp2', ['None','fft', 'fftfltr', 'lia', 'liafltr'])
+        self.parLayout.addWidget(d['widget'])
+        d['savename']='acheatcapacity_2'
+        d['fcns']=[None, mCp_fftVIRdT2, mCp_fftfVIRdT2, mCp_liaVIRdT2, mCp_liafVIRdT2]
+        d['parnames']=[[], ['fftV', 'fftI', 'R', 'dT'], ['ffV', 'fftI', 'R', 'dT'], ['liaV', 'liaI', 'R', 'dT'], ['lfV', 'liaI', 'R', 'dT']]
+        d['segdkeys']=[[], ['WinFFT_voltage', 'WinFFT_current', 'sampleresistance', 'sampleheatrate'], ['WinFFT_filteredvoltage', 'WinFFT_current', 'sampleresistance', 'sampleheatrate'], ['LIAharmonics_voltage', 'LIAharmonics_filteredcurrent', 'sampleresistance', 'sampleheatrate'], ['LIAharmonics_filteredvoltage', 'LIAharmonics_filteredcurrent', 'sampleresistance', 'sampleheatrate']]
+        d['postcombofcns']=[self.nofilterfill]+[self.filterfill]*4
+        d['parcombofcns']=[[]]+[[self.acvh23filterfill, self.filterfill, self.filterfill, self.filterfill]]*2+[[self.acvh3filterfill, self.filterfill, self.filterfill, self.filterfill]]*2
+        d['slider'].setMaximum(len(d['parnames'])-1)
+        self.pardlist+=[copy.copy(d)]
+        QObject.connect(d['slider'], SIGNAL("sliderReleased()"), self.slidermoved1)
+        
+        d=self.calclayoutgen('mCp3', ['None','fft', 'fftfltr', 'lia', 'liafltr'])
+        self.parLayout.addWidget(d['widget'])
+        d['savename']='acheatcapacity_3'
+        d['fcns']=[None, mCp_fftVIRdT3, mCp_fftfVIRdT3, mCp_liaVIRdT3, mCp_liafVIRdT3]
+        d['parnames']=[[], ['fftV', 'fftI', 'R', 'dT'], ['ffV', 'fftI', 'R', 'dT'], ['liaV', 'liaI', 'R', 'dT'], ['lfV', 'liaI', 'R', 'dT']]
+        d['segdkeys']=[[], ['WinFFT_voltage', 'WinFFT_current', 'sampleresistance', 'sampleheatrate'], ['WinFFT_filteredvoltage', 'WinFFT_current', 'sampleresistance', 'sampleheatrate'], ['LIAharmonics_voltage', 'LIAharmonics_filteredcurrent', 'sampleresistance', 'sampleheatrate'], ['LIAharmonics_filteredvoltage', 'LIAharmonics_filteredcurrent', 'sampleresistance', 'sampleheatrate']]
+        d['postcombofcns']=[self.nofilterfill]+[self.filterfill]*4
+        d['parcombofcns']=[[]]+[[self.acvh23filterfill, self.filterfill, self.filterfill, self.filterfill]]*2+[[self.acvh3filterfill, self.filterfill, self.filterfill, self.filterfill]]*2
+        d['slider'].setMaximum(len(d['parnames'])-1)
+        self.pardlist+=[copy.copy(d)]
+        QObject.connect(d['slider'], SIGNAL("sliderReleased()"), self.slidermoved2)
+        
+        d=self.calclayoutgen('mCp4', ['None','fft', 'fftfltr', 'lia', 'liafltr'])
+        self.parLayout.addWidget(d['widget'])
+        d['savename']='acheatcapacity_4'
+        d['fcns']=[None, mCp_fftVIRdT4, mCp_fftfVIRdT4, mCp_liaVIRdT4, mCp_liafVIRdT4]
+        d['parnames']=[[], ['fftV', 'fftI', 'R', 'dT'], ['ffV', 'fftI', 'R', 'dT'], ['liaV', 'liaI', 'R', 'dT'], ['lfV', 'liaI', 'R', 'dT']]
+        d['segdkeys']=[[], ['WinFFT_voltage', 'WinFFT_current', 'sampleresistance', 'sampleheatrate'], ['WinFFT_filteredvoltage', 'WinFFT_current', 'sampleresistance', 'sampleheatrate'], ['LIAharmonics_voltage', 'LIAharmonics_filteredcurrent', 'sampleresistance', 'sampleheatrate'], ['LIAharmonics_filteredvoltage', 'LIAharmonics_filteredcurrent', 'sampleresistance', 'sampleheatrate']]
+        d['postcombofcns']=[self.nofilterfill]+[self.filterfill]*4
+        d['parcombofcns']=[[]]+[[self.acvh23filterfill, self.filterfill, self.filterfill, self.filterfill]]*2+[[self.acvh3filterfill, self.filterfill, self.filterfill, self.filterfill]]*2
+        d['slider'].setMaximum(len(d['parnames'])-1)
+        self.pardlist+=[copy.copy(d)]
+        QObject.connect(d['slider'], SIGNAL("sliderReleased()"), self.slidermoved3)
+        
+        return 4
         
     def ExitRoutine(self):
         if self.saveCheckBox.isChecked():
@@ -498,7 +560,7 @@ class SCrecipeDialog(QDialog):
         saveSCrecipe(self.h5path, self.h5expname, self.recname, fcns, recdlist)
         return True
         
-    def calcall(self):
+    def calcall(self): #not supported as of 12Nov2011
         if self.calctype=='FitPS':
             xdata=[]
             fitans=[]
@@ -576,6 +638,7 @@ class SCrecipeDialog(QDialog):
         for wind in widgetind:
             d=self.pardlist[wind]
             ind=d['slider'].sliderPosition()
+            count=-1
             for count, (lb, s) in enumerate(zip(d['parlabels'], d['parnames'][ind])):
                 lb.setText(s)
             for lb in d['parlabels'][count+1:]:
@@ -1058,6 +1121,8 @@ class SCanalysisDialog(QDialog):
             for si in seginds:
                 partup_seg=[('segd',hpsegdlist[si])]
                 for f, saven, namsegkfilk, postfilk in f_saven_namsegkfilk_postfilk:
+                    if f=='None' or f is None:
+                        continue
                     print 'calculating %s for segment %d in hp %s' %(saven, si, h5hpname)
                     f=eval(f)
                     arr=f(**dict(partups+hppartup+partup_seg+namsegkfilk))
@@ -1924,28 +1989,64 @@ def T_liaIfV(segd, fild, liaI, fV, h5path=None, h5expname=None, h5hpname=None):
 def P_liaIfV(segd, fild, liaI, fV, h5path=None, h5expname=None, h5hpname=None):
     return P_liaIV(segd, fild, liaI, fV, h5path=h5path, h5expname=h5expname, h5hpname=h5hpname)
 
-def mCp_fftVIPdT(segd, fild, fftV, fftI, R, dT, h5path, h5expname, h5hpname):
+def mCp_fftVIRdT(segd, fild, fftV, fftI, R, dT, h5path, h5expname, h5hpname):
     h=fild[fftV[1]]['harmonic']
     harmind=h*3
     harm01inds=[0, 3]
     return mCp_gen(segd, fild, fftV, fftI, R, dT, h5path, h5expname, h5hpname, h, harmind, harm01inds=harm01inds)
 
-def mCp_fftfVIPdT(segd, fild, ffV, fftI, R, dT, h5path, h5expname, h5hpname):
+def mCp_fftfVIRdT(segd, fild, ffV, fftI, R, dT, h5path, h5expname, h5hpname):
     h=fild[ffV[1]]['harmonic']
     harmind=h*3
     harm01inds=[0, 3]
     return mCp_gen(segd, fild, ffV, fftI, R, dT, h5path, h5expname, h5hpname, h, harmind, harm01inds=harm01inds, Vsrcisfiltered=True)
     
-def mCp_liaVIPdT(segd, fild, liaV, liaI, R, dT, h5path, h5expname, h5hpname):
+def mCp_liaVIRdT(segd, fild, liaV, liaI, R, dT, h5path, h5expname, h5hpname):
     h=fild[liaV[1]]['harmonic']
     harmind=h-1
     return mCp_gen(segd, fild, liaV, liaI, R, dT, h5path, h5expname, h5hpname, h, harmind)
 
-def mCp_liafVIPdT(segd, fild, lfV, liaI, R, dT, h5path, h5expname, h5hpname):
+def mCp_liafVIRdT(segd, fild, lfV, liaI, R, dT, h5path, h5expname, h5hpname):
     h=fild[lfV[1]]['harmonic']
     harmind=h-1
     return mCp_gen(segd, fild, lfV, liaI, R, dT, h5path, h5expname, h5hpname, h, harmind, Vsrcisfiltered=True)
+
+def mCp_fftVIRdT1(segd, fild, fftV, fftI, R, dT, h5path, h5expname, h5hpname):
+    return mCp_fftVIRdT(segd, fild, fftV, fftI, R, dT, h5path, h5expname, h5hpname)
+def mCp_fftVIRdT2(segd, fild, fftV, fftI, R, dT, h5path, h5expname, h5hpname):
+    return mCp_fftVIRdT(segd, fild, fftV, fftI, R, dT, h5path, h5expname, h5hpname)
+def mCp_fftVIRdT3(segd, fild, fftV, fftI, R, dT, h5path, h5expname, h5hpname):
+    return mCp_fftVIRdT(segd, fild, fftV, fftI, R, dT, h5path, h5expname, h5hpname)
+def mCp_fftVIRdT4(segd, fild, fftV, fftI, R, dT, h5path, h5expname, h5hpname):
+    return mCp_fftVIRdT(segd, fild, fftV, fftI, R, dT, h5path, h5expname, h5hpname)
     
+def mCp_fftfVIRdT1(segd, fild, ffV, fftI, R, dT, h5path, h5expname, h5hpname):
+    return mCp_fftfVIRdT(segd, fild, ffV, fftI, R, dT, h5path, h5expname, h5hpname)
+def mCp_fftfVIRdT2(segd, fild, ffV, fftI, R, dT, h5path, h5expname, h5hpname):
+    return mCp_fftfVIRdT(segd, fild, ffV, fftI, R, dT, h5path, h5expname, h5hpname)
+def mCp_fftfVIRdT3(segd, fild, ffV, fftI, R, dT, h5path, h5expname, h5hpname):
+    return mCp_fftfVIRdT(segd, fild, ffV, fftI, R, dT, h5path, h5expname, h5hpname)
+def mCp_fftfVIRdT4(segd, fild, ffV, fftI, R, dT, h5path, h5expname, h5hpname):
+    return mCp_fftfVIRdT(segd, fild, ffV, fftI, R, dT, h5path, h5expname, h5hpname)
+    
+def mCp_liaVIRdT1(segd, fild, liaV, liaI, R, dT, h5path, h5expname, h5hpname):
+    return mCp_liaVIRdT(segd, fild, liaV, liaI, R, dT, h5path, h5expname, h5hpname)
+def mCp_liaVIRdT2(segd, fild, liaV, liaI, R, dT, h5path, h5expname, h5hpname):
+    return mCp_liaVIRdT(segd, fild, liaV, liaI, R, dT, h5path, h5expname, h5hpname)
+def mCp_liaVIRdT3(segd, fild, liaV, liaI, R, dT, h5path, h5expname, h5hpname):
+    return mCp_liaVIRdT(segd, fild, liaV, liaI, R, dT, h5path, h5expname, h5hpname)
+def mCp_liaVIRdT4(segd, fild, liaV, liaI, R, dT, h5path, h5expname, h5hpname):
+    return mCp_liaVIRdT(segd, fild, liaV, liaI, R, dT, h5path, h5expname, h5hpname)
+
+def mCp_liafVIRdT1(segd, fild, lfV, liaI, R, dT, h5path, h5expname, h5hpname):
+    return mCp_liafVIRdT(segd, fild, lfV, liaI, R, dT, h5path, h5expname, h5hpname)
+def mCp_liafVIRdT2(segd, fild, lfV, liaI, R, dT, h5path, h5expname, h5hpname):
+    return mCp_liafVIRdT(segd, fild, lfV, liaI, R, dT, h5path, h5expname, h5hpname)
+def mCp_liafVIRdT3(segd, fild, lfV, liaI, R, dT, h5path, h5expname, h5hpname):
+    return mCp_liafVIRdT(segd, fild, lfV, liaI, R, dT, h5path, h5expname, h5hpname)
+def mCp_liafVIRdT4(segd, fild, lfV, liaI, R, dT, h5path, h5expname, h5hpname):
+    return mCp_liafVIRdT(segd, fild, lfV, liaI, R, dT, h5path, h5expname, h5hpname)
+
 def mCp_gen(segd, fild, acV, acI, R, dT, h5path, h5expname, h5hpname, h, harmind, harm01inds=None, Vsrcisfiltered=False):#the I, dIdt, etc. should be tuples with a key for segd and then a key for fild
     RoToAl=RoToAl_h5(h5path, h5expname, h5hpname)
     ppc=pts_sincycle_h5(h5path, h5expname, h5hpname)
@@ -1953,7 +2054,7 @@ def mCp_gen(segd, fild, acV, acI, R, dT, h5path, h5expname, h5hpname, h, harmind
     freq1w=1./(ppc*dt)
     if h<2:
         print 'not supported - you are about to get an error of P being undefined'
-        return D_PS(segd, fild, P, dT, h5path=h5path, h5expname=h5expname, h5hpname=h5hpname)
+        return D_PS(segd, fild, R, dT, h5path=h5path, h5expname=h5expname, h5hpname=h5hpname)
     elif h==2:
         mCpfcn=mCp_2w
     elif h==3:
@@ -1963,7 +2064,7 @@ def mCp_gen(segd, fild, acV, acI, R, dT, h5path, h5expname, h5hpname, h, harmind
         return None
     acV+=(segd[acV[0]][:, :, harmind, :],)#the last ":" is for using X and Y, any smoothing filter will be applied to both
     acI+=(segd[acI[0]][:, :, harm01inds+[harmind], :],)
-    for tup in [acV, acI, P, dT]:
+    for tup in [acV, acI, R, dT]:
         (segkey, filkey)=tup[:2]
         if not '~'.join(tup[:2]) in segd.keys():
             if len(tup)==3:

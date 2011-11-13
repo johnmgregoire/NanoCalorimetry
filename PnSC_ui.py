@@ -2048,8 +2048,125 @@ class acharmonicsDialog(QDialog):
 
         QMetaObject.connectSlotsByName(self)
 
+class textexportDialog(QDialog):
+    def __init__(self, parent, h5path, h5expname, h5hpname, title='Export arrays as tab-delim text'):
+        super(textexportDialog, self).__init__(parent)
+        
+        self.hpsdl=CreateHeatProgSegDictList(h5path, h5expname, h5hpname, expandmultdim=True)
+        self.ncycs=self.hpsdl[0]['cycletime'].shape[0]
+        for d in self.hpsdl:
+            d['index']=numpy.float32([numpy.arange(d['segment_inds'][1]-d['segment_inds'][0])+d['segment_inds'][0] for count in range(self.ncycs)])
+        
+        self.keys=set([k for d in self.hpsdl for k, v in d.iteritems() if isinstance(v, numpy.ndarray) and v.shape==d['cycletime'].shape])
+        self.keys=sorted(list(self.keys))
+        
+        ncols=int(numpy.ceil(len(self.keys)/10.))
+        ninitrows=6
+        
+        seglayout=QGridLayout()
+        lab=QLabel()
+        s='Enter comma-delim list of segments to export. The length of each segment is\n'+','.join(['%d' %d['cycletime'].shape[1] for d in self.hpsdl])
+        lab.setText(s)
+        self.segLineEdit=QLineEdit()
+        self.segLineEdit.setText(','.join(['%d' %count for count in range(len(self.hpsdl))]))
+        seglayout.addWidget(lab, 0, 0)
+        seglayout.addWidget(self.segLineEdit, 1, 0)
+        
+        cyclayout=QGridLayout()
+        lab=QLabel()
+        lab.setText('select cycle(s) to export')
+        self.cycleComboBox=QComboBox()
+        for i in range(self.ncycs):
+            self.cycleComboBox.insertItem(i, `i`)
+        self.cycleComboBox.insertItem(i+1, 'all')
+        cyclayout.addWidget(lab, 0, 0)
+        cyclayout.addWidget(self.cycleComboBox, 0, 1)
+    
+        fmtlayout=QGridLayout()
+        lab=QLabel()
+        lab.setText('fmt string:')
+        self.fmtLineEdit=QLineEdit()
+        self.fmtLineEdit.setText('%.4e')
+        
+        lab2=QLabel()
+        lab2.setText('index interval:')
+        self.intervSpinBox=QSpinBox()
+        self.intervSpinBox.setRange(1, 1000000)
+        self.intervSpinBox.setValue(1)
+        
+        fmtlayout.addWidget(lab, 0, 0)
+        fmtlayout.addWidget(self.fmtLineEdit, 0, 1)
+        fmtlayout.addWidget(lab2, 0, 2)
+        fmtlayout.addWidget(self.intervSpinBox, 0, 3)
+        
+        
+        saveButton=QPushButton()
+        saveButton.setText("Save .txt file (make all selections first)")
+        QObject.connect(saveButton, SIGNAL("pressed()"), self.save)
+        
+        doclab=QLabel()
+        doclab.setText('below is a list of all array quantities and the segments over which they are available.\n'\
+                    +'Check the boxes of those you want exported')
+        mainlayout=QGridLayout()
+        mainlayout.addLayout(seglayout, 0, 0, 2, ncols)
+        mainlayout.addLayout(cyclayout, 2, 0, 1, ncols)
+        mainlayout.addLayout(fmtlayout, 3, 0, 1, ncols)
+        mainlayout.addWidget(saveButton, 4, 0, 1, ncols)
+        mainlayout.addWidget(doclab, 5, 0, 1, ncols)
+        
+        
+        self.cblist=[]
+        for i, k in enumerate(self.keys):
+            cb=QCheckBox()
+            s=k+':'
+            s+=','.join(['%d' %count for count, d in enumerate(self.hpsdl) if k in d.keys() and not numpy.any(numpy.isnan(d[k]))])
+            cb.setText(s)
+            mainlayout.addWidget(cb, ninitrows+i%10, i//10)
+            self.cblist+=[cb]
 
 
+        self.setLayout(mainlayout)
+
+        QMetaObject.connectSlotsByName(self)
+
+    def save(self):
+        try:
+            segs=eval('numpy.int16(['+str(self.segLineEdit.text())+'])')
+        except:
+            QMessageBox.warning(self,"FAILED",  "ABORTED because could not interpret segment list")
+            return
+        try:
+            fmt=str(self.fmtLineEdit.text())
+            fmt %1.1
+        except:
+            QMessageBox.warning(self,"FAILED",  "ABORTED because could not interpret fmt string")
+            return
+        
+        fmtfcn=lambda x:(numpy.isnan(x) and ('NaN',) or (fmt %x,))[0]
+        
+        indinterv=self.intervSpinBox.value()
+        
+        p=mygetsavefile(parent=self, markstr='filename for text data export - WILL OVERWRITE IF EXISTS')
+        if len(p)==0:
+            return
+        cycoptind=self.cycleComboBox.currentIndex()
+        if cycoptind>=self.ncycs:
+            cycl=range(self.ncycs)
+            pstart, pext=os.path.splitext(p)
+            getp=lambda cyci:''.join((pstart, '_%d_of_%d' %(cyci+1, self.ncycs), pext))
+        else:
+            cycl=[cycoptind]
+            getp=lambda cyci:p
+        keyl=[k for k, cb in zip(self.keys, self.cblist) if cb.isChecked()]
+        
+        getarr=lambda k, segi, cyci, indinterv:(k in self.hpsdl[segi] and (self.hpsdl[segi][k][cyci][::indinterv],) or (self.hpsdl[segi]['cycletime'][cyci][::indinterv]+numpy.nan,))[0]
+        for cyci in cycl:
+            path=getp(cyci)
+            arr=numpy.array([numpy.concatenate([getarr(k, segi, cyci, indinterv) for segi in segs]) for k in keyl])
+        s='\n'.join(['\t'.join([fmtfcn(x) for x in a]) for a in arr.T])
+        f=open(path, mode='w')
+        f.write('\t'.join(keyl)+'\n'+s)
+        f.close()
 
 PinoutLibrary={\
 'xiaodong2010':numpy.array(\

@@ -17,9 +17,9 @@ def FileImport(parent, protocolname, batchattrdict=None):
     if 'PatDAQ' in protocolname:
         fn='.dat'
         ms='Select .dat text file'
-    elif 'JimDAQ' in protocolname or 'CHESSDAQ' in protocolname:
-        fn='.csv'
-        ms='Select a .csv text file from the any cycle'
+    else:
+        fn='.dat'
+        ms='Select a data file. If >1 cycle, choose file for only one cycle'
     if batchattrdict is None:
         p=mygetopenfile(parent=parent, markstr=ms, filename=fn)
     else:
@@ -173,6 +173,19 @@ def JimDAQ2011_SC(parent, filepath, batchattrdict=None):
     d['CELLNUMBER']=JimDAQ_getcell(filepath)
     return d, ds, [[], []]
 
+def JimDAQ2011_DSC(parent, filepath, batchattrdict=None):
+    dlist, arrlist=JimDAQ2011_fileiterator(filepath)
+    arr=truncate_arrlist_shortest(arrlist)
+    d=JimDAQ2011_translateheader(dlist[0])
+    d['ncycles']=len(dlist)
+    ds={}
+    ds['samplecurrent']=({'Aunit':0.001}, arr[:, :, 0])
+    ds['samplevoltage']=({'Vunit':checkfornegvoltage(arr[:, :, 3])*0.001}, arr[:, :, 3])
+    ds['refcurrent']=({'Aunit':0.001}, arr[:, :, 1])
+    ds['refvoltage']=({'Vunit':checkfornegvoltage(arr[:, :, 3])*0.001}, arr[:, :, 2])
+    d['CELLNUMBER']=JimDAQ_getcell(filepath)
+    return d, ds, [[], []]
+    
 def JimDAQ2011_acSC(parent, filepath, batchattrdict=None):
     dlist, arrlist=JimDAQ2011_fileiterator(filepath)
     arr=truncate_arrlist_shortest(arrlist)
@@ -661,8 +674,7 @@ FileFormatFunctionLibrary={\
                    'PatDAQ2011_SC':PatDAQ2011_SC, \
                    'JimDAQ_SC':JimDAQ_SC, \
                    'JimDAQ2011_SC':JimDAQ2011_SC, \
-#                   'JimDAQ_DSC':JimDAQ_DSC, \
-#                   'JimDAQ_DTA':JimDAQ_DTA, \
+                   'JimDAQ2011_DSC':JimDAQ2011_DSC, \
                    }
 
 
