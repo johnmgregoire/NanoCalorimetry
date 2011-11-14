@@ -278,11 +278,16 @@ def saveSCcalculations(h5path, h5expname, h5hpname, hpsegdlist, recname):
     h5file=h5py.File(h5path, mode='r+')
     h5an=getcalanalysis(h5file, h5expname)
     h5hp=gethpgroup(h5file, h5expname)
+    h5rg=getSCrecipegrp(h5file, h5expname)[recname]
+    recsavekeys=[]
+    for fcnname in h5rg.attrs['fcns']:
+        g=h5rg[fcnname]
+        recsavekeys+=[g.attrs['savename']]
     if h5hpname in h5an:
         h5g=h5an[h5hpname]
     else:
         h5g=h5an.create_group(h5hpname)
-    savekeys=set([(k, d[k].shape[2:], d[k].dtype) for d in hpsegdlist for k in d.keys() if not ('~' in k or k in h5hp[h5hpname] or k=='cycletime') and isinstance(d[k], numpy.ndarray) and d[k].shape[:2]==d['cycletime'].shape])
+    savekeys=set([(k, d[k].shape[2:], d[k].dtype) for d in hpsegdlist for k in d.keys() if k in recsavekeys and not ('~' in k or k in h5hp[h5hpname] or k=='cycletime') and isinstance(d[k], numpy.ndarray) and d[k].shape[:2]==d['cycletime'].shape])
     #nansegssh=[numpy.ones(d['cycletime'].shape, dtype=d['cycletime'].dtype)*numpy.nan for d in hpsegdlist]
     nansegssh=[d['cycletime'].shape for d in hpsegdlist]
     mastershape=piecetogethersegments([d['cycletime'] for d in hpsegdlist]).shape
@@ -294,7 +299,7 @@ def saveSCcalculations(h5path, h5expname, h5hpname, hpsegdlist, recname):
         ds.attrs['recipe']=recname
         
     #now save fit results    
-    savekeys=set([k for d in hpsegdlist for k in d.keys() if k.startswith('FITPARS_') and not ('~' in k or k in h5hp[h5hpname] or k=='cycletime') and isinstance(d[k], numpy.ndarray)])
+    savekeys=set([k for d in hpsegdlist for k in d.keys() if k.startswith('FITPARS_') and k in recsavekeys and not ('~' in k or k in h5hp[h5hpname] or k=='cycletime') and isinstance(d[k], numpy.ndarray)])
     for k in list(savekeys):
         if k in h5g:
             h5fg=h5g[k]
@@ -308,7 +313,7 @@ def saveSCcalculations(h5path, h5expname, h5hpname, hpsegdlist, recname):
                 ds.attrs['recipe']=recname
     
     #now save profile analysis
-    savekeys=set([k for d in hpsegdlist for k in d.keys() if k.startswith('PROFILEANALYSIS_') and not ('~' in k or k in h5hp[h5hpname] or k=='cycletime') and isinstance(d[k], dict)])
+    savekeys=set([k for d in hpsegdlist for k in d.keys() if k.startswith('PROFILEANALYSIS_') and k in recsavekeys and not ('~' in k or k in h5hp[h5hpname] or k=='cycletime') and isinstance(d[k], dict)])
     for k in list(savekeys):
         if k in h5g:
             h5pa=h5g[k]

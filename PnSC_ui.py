@@ -2029,11 +2029,11 @@ class acharmonicsDialog(QDialog):
                 plotw=plotwlist[ampp]
                 plotw.ax.plot(indlist, numpy.sqrt(arr[:, 1]**2+arr[:, 0]**2), c+'--', label=l+'A', markersize=markersize)
         
-        for plotw in plotwlist:
+        for count, plotw in enumerate(plotwlist):
             try:
-                leg=plotw.ax.legend(loc=2, frameon=False)
-                temp=[t.set_fontsize(12) for t in leg.texts]
                 plotw.ax.yaxis.set_major_formatter(ExpTickLabels)
+                leg=plotw.ax.legend(loc=2, frameon=False)
+                #temp=[t.set_fontsize(12) for t in leg.texts]
             except:
                 pass
             if not plotw.ax2 is None:

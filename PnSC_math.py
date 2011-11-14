@@ -66,7 +66,7 @@ def savgolsmooth(x, nptsoneside=7, order = 4, dx=1.0, deriv=0, binprior=0): #bas
     
     if binprior>1:    
         ia=numpy.arange(binprior, dtype='float32')/binprior
-        xr=numpy.concatenate([ia*(b-a)+b for a, b in zip(smooth_data[:-1], smooth_data[1:])])
+        xr=numpy.concatenate([ia*(b-a)+a for a, b in zip(smooth_data[:-1], smooth_data[1:])])
         xr=numpy.concatenate([(smooth_data[1]-smooth_data[0])*ia[:binprior//2]+smooth_data[0], xr, (smooth_data[-1]-smooth_data[-2])*ia[:binprior//2]+smooth_data[-1]])
         smooth_data=numpy.concatenate([xr, (smooth_data[-1]-smooth_data[-2])*ia[:origlen-len(xr)]+smooth_data[-1]])
 
