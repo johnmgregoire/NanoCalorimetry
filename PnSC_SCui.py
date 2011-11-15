@@ -407,7 +407,7 @@ class SCrecipeDialog(QDialog):
         d['parnames']=[['fftI', 'fftV'], ['fftI', 'fV'], ['liaI', 'liaV'], ['liaI', 'fV']]
         d['segdkeys']=[['WinFFT_current', 'WinFFT_voltage'], ['WinFFT_current', 'WinFFT_filteredvoltage'], ['LIAharmonics_current', 'LIAharmonics_voltage'], ['LIAharmonics_current', 'LIAharmonics_filteredvoltage']]
         d['postcombofcns']=[self.filterfill]*4
-        d['parcombofcns']=[[self.acvh01filterfill, self.filterfill]]*4
+        d['parcombofcns']=[[self.acvh01bothfilterfill, self.filterfill]]+[[self.acvh01filterfill, self.filterfill]]*3
         d['slider'].setMaximum(len(d['parnames'])-1)
         self.pardlist+=[copy.copy(d)]
         QObject.connect(d['slider'], SIGNAL("sliderReleased()"), self.slidermoved0)
@@ -424,14 +424,14 @@ class SCrecipeDialog(QDialog):
         self.pardlist+=[copy.copy(d)]
         QObject.connect(d['slider'], SIGNAL("sliderReleased()"), self.slidermoved1)
         
-        d=self.calclayoutgen('P', ['fft', 'fftfltr', 'lia', 'liafltr'])
+        d=self.calclayoutgen('P', ['fft'])
         self.parLayout.addWidget(d['widget'])
         d['savename']='samplepower'
-        d['fcns']=[P_fftIV, P_fftIfV, P_liaIV, P_liaIfV]
-        d['parnames']=[['fftI', 'fftV'], ['fftI', 'fV'], ['liaI', 'liaV'], ['liaI', 'fV']]
-        d['segdkeys']=[['WinFFT_current', 'WinFFT_voltage'], ['WinFFT_current', 'WinFFT_filteredvoltage'], ['LIAharmonics_current', 'LIAharmonics_voltage'], ['LIAharmonics_current', 'LIAharmonics_filteredvoltage']]
-        d['postcombofcns']=[self.filterfill]*4
-        d['parcombofcns']=[[self.acvh01filterfill, self.filterfill]]*4
+        d['fcns']=[P_fftIV]
+        d['parnames']=[['fftI', 'fftV']]
+        d['segdkeys']=[['WinFFT_current', 'WinFFT_voltage']]
+        d['postcombofcns']=[self.filterfill]
+        d['parcombofcns']=[[self.filterfill, self.filterfill]]
         d['slider'].setMaximum(len(d['parnames'])-1)
         self.pardlist+=[copy.copy(d)]
         QObject.connect(d['slider'], SIGNAL("sliderReleased()"), self.slidermoved2)
@@ -769,6 +769,9 @@ class SCrecipeDialog(QDialog):
 
     def acvh01filterfill(self, cb):
         self.filterfill(cb, harmonic=[0, 1], reqkeys=['harmonic'])
+    
+    def acvh01bothfilterfill(self, cb):
+        self.filterfill(cb, harmonic=[0, 1, 'both'], reqkeys=['harmonic'])
 
     def acvh3filterfill(self, cb):
         self.filterfill(cb, harmonic=[3], reqkeys=['harmonic'])
@@ -816,6 +819,7 @@ class SCrecipeDialog(QDialog):
         d=self.dfltfilterdict()
         d['SGnpts']=0
         d['harmonic']=h
+        d['applyVmods']='dflt: True for V, False for fv'
         return d
     
     def Nonefilterdict(self):
@@ -1935,9 +1939,13 @@ def LIA(segd, fild, X, h5path, h5expname, h5hpname):
 
 def R_fftIV(segd, fild, fftI, fftV, h5path=None, h5expname=None, h5hpname=None):
     h=fild[fftI[1]]['harmonic']
-    freqind=h*3
-    I=fftI+(numpy.sqrt((segd[fftI[0]][:, :, freqind, :]**2).sum(axis=2)),)
-    V=fftV+(numpy.sqrt((segd[fftV[0]][:, :, freqind, :]**2).sum(axis=2)),)
+    if h=='both':
+        I=fftI+(numpy.sqrt((segd[fftI[0]][:, :, 0, :]**2).sum(axis=2))+numpy.sqrt((segd[fftI[0]][:, :, 3, :]**2).sum(axis=2))/(2.**.5),)
+        V=fftV+(numpy.sqrt((segd[fftV[0]][:, :, 0, :]**2).sum(axis=2))+numpy.sqrt((segd[fftV[0]][:, :, 3, :]**2).sum(axis=2))/(2.**.5),)   
+    else:
+        freqind=h*3
+        I=fftI+(numpy.sqrt((segd[fftI[0]][:, :, freqind, :]**2).sum(axis=2)),)
+        V=fftV+(numpy.sqrt((segd[fftV[0]][:, :, freqind, :]**2).sum(axis=2)),)
     return R_IV(segd, fild, I, V, h5path=h5path, h5expname=h5expname, h5hpname=h5hpname)
 
 def T_fftIV(segd, fild, fftI, fftV, h5path, h5expname, h5hpname):
@@ -1948,10 +1956,10 @@ def T_fftIV(segd, fild, fftI, fftV, h5path, h5expname, h5hpname):
     return T_IV(segd, fild, I, V, h5path=h5path, h5expname=h5expname, h5hpname=h5hpname)
 
 def P_fftIV(segd, fild, fftI, fftV, h5path, h5expname, h5hpname):
-    h=fild[fftI[1]]['harmonic']
-    freqind=h*3
-    I=fftI+(numpy.sqrt((segd[fftI[0]][:, :, freqind, :]**2).sum(axis=2)),)
-    V=fftV+(numpy.sqrt((segd[fftV[0]][:, :, freqind, :]**2).sum(axis=2)),)
+#    h=fild[fftI[1]]['harmonic']
+#    freqind=h*3
+    I=fftI+(numpy.sqrt((segd[fftI[0]][:, :, 0, :]**2).sum(axis=2))+numpy.sqrt((segd[fftI[0]][:, :, 3, :]**2).sum(axis=2))/(2.**.5),)
+    V=fftV+(numpy.sqrt((segd[fftV[0]][:, :, 0, :]**2).sum(axis=2))+numpy.sqrt((segd[fftV[0]][:, :, 3, :]**2).sum(axis=2))/(2.**.5),)
     return P_IV(segd, fild, I, V, h5path=h5path, h5expname=h5expname, h5hpname=h5hpname)
 
 def R_liaIV(segd, fild, liaI, liaV, h5path=None, h5expname=None, h5hpname=None):
@@ -1968,48 +1976,64 @@ def T_liaIV(segd, fild, liaI, liaV, h5path=None, h5expname=None, h5hpname=None):
     V=liaV+(numpy.sqrt((segd[liaV[0]][:, :, freqind, :]**2).sum(axis=2)),)
     return T_IV(segd, fild, I, V, h5path=h5path, h5expname=h5expname, h5hpname=h5hpname)
 
-def P_liaIV(segd, fild, liaI, liaV, h5path=None, h5expname=None, h5hpname=None):
-    h=fild[liaI[1]]['harmonic']
-    freqind=h-1
-    I=liaI+(numpy.sqrt((segd[liaI[0]][:, :, freqind, :]**2).sum(axis=2)),)
-    V=liaV+(numpy.sqrt((segd[liaV[0]][:, :, freqind, :]**2).sum(axis=2)),)
-    return P_IV(segd, fild, I, V, h5path=h5path, h5expname=h5expname, h5hpname=h5hpname)
+#def P_liaIV(segd, fild, liaI, liaV, h5path=None, h5expname=None, h5hpname=None):
+#    h=fild[liaI[1]]['harmonic']
+#    freqind=h-1
+#    I=liaI+(numpy.sqrt((segd[liaI[0]][:, :, freqind, :]**2).sum(axis=2)),)
+#    V=liaV+(numpy.sqrt((segd[liaV[0]][:, :, freqind, :]**2).sum(axis=2)),)
+#    return P_IV(segd, fild, I, V, h5path=h5path, h5expname=h5expname, h5hpname=h5hpname)
 
 def R_fftIfV(segd, fild, fftI, fV, h5path=None, h5expname=None, h5hpname=None):
     return R_fftIV(segd, fild, fftI, fV, h5path=h5path, h5expname=h5expname, h5hpname=h5hpname)
 def T_fftIfV(segd, fild, fftI, fV, h5path=None, h5expname=None, h5hpname=None):
     return T_fftIV(segd, fild, fftI, fV, h5path=h5path, h5expname=h5expname, h5hpname=h5hpname)
-def P_fftIfV(segd, fild, fftI, fV, h5path=None, h5expname=None, h5hpname=None):
-    return P_fftIV(segd, fild, fftI, fV, h5path=h5path, h5expname=h5expname, h5hpname=h5hpname)
+#def P_fftIfV(segd, fild, fftI, fV, h5path=None, h5expname=None, h5hpname=None):
+#    return P_fftIV(segd, fild, fftI, fV, h5path=h5path, h5expname=h5expname, h5hpname=h5hpname)
 
 def R_liaIfV(segd, fild, liaI, fV, h5path=None, h5expname=None, h5hpname=None):
     return R_liaIV(segd, fild, liaI, fV, h5path=h5path, h5expname=h5expname, h5hpname=h5hpname)
 def T_liaIfV(segd, fild, liaI, fV, h5path=None, h5expname=None, h5hpname=None):
     return T_liaIV(segd, fild, liaI, fV, h5path=h5path, h5expname=h5expname, h5hpname=h5hpname)
-def P_liaIfV(segd, fild, liaI, fV, h5path=None, h5expname=None, h5hpname=None):
-    return P_liaIV(segd, fild, liaI, fV, h5path=h5path, h5expname=h5expname, h5hpname=h5hpname)
+#def P_liaIfV(segd, fild, liaI, fV, h5path=None, h5expname=None, h5hpname=None):
+#    return P_liaIV(segd, fild, liaI, fV, h5path=h5path, h5expname=h5expname, h5hpname=h5hpname)
 
 def mCp_fftVIRdT(segd, fild, fftV, fftI, R, dT, h5path, h5expname, h5hpname):
     h=fild[fftV[1]]['harmonic']
     harmind=h*3
     harm01inds=[0, 3]
-    return mCp_gen(segd, fild, fftV, fftI, R, dT, h5path, h5expname, h5hpname, h, harmind, harm01inds=harm01inds)
+    if 'applyVmods' in fild[fftV[1]] and isinstance(fild[fftV[1]]['applyVmods'], bool):
+        applyVmods=fild[fftV[1]]['applyVmods']
+    else:
+        applyVmods=False
+    return mCp_gen(segd, fild, fftV, fftI, R, dT, h5path, h5expname, h5hpname, h, harmind, harm01inds=harm01inds, applyVmods=applyVmods)
 
 def mCp_fftfVIRdT(segd, fild, ffV, fftI, R, dT, h5path, h5expname, h5hpname):
     h=fild[ffV[1]]['harmonic']
     harmind=h*3
     harm01inds=[0, 3]
-    return mCp_gen(segd, fild, ffV, fftI, R, dT, h5path, h5expname, h5hpname, h, harmind, harm01inds=harm01inds, Vsrcisfiltered=True)
+    if 'applyVmods' in fild[ffV[1]] and isinstance(ffV[lfV[1]]['applyVmods'], bool):
+        applyVmods=fild[ffV[1]]['applyVmods']
+    else:
+        applyVmods=False
+    return mCp_gen(segd, fild, ffV, fftI, R, dT, h5path, h5expname, h5hpname, h, harmind, harm01inds=harm01inds, applyVmods=applyVmods)
     
 def mCp_liaVIRdT(segd, fild, liaV, liaI, R, dT, h5path, h5expname, h5hpname):
     h=fild[liaV[1]]['harmonic']
     harmind=h-1
-    return mCp_gen(segd, fild, liaV, liaI, R, dT, h5path, h5expname, h5hpname, h, harmind)
+    if 'applyVmods' in fild[liaV[1]] and isinstance(fild[liaV[1]]['applyVmods'], bool):
+        applyVmods=fild[liaV[1]]['applyVmods']
+    else:
+        applyVmods=True
+    return mCp_gen(segd, fild, liaV, liaI, R, dT, h5path, h5expname, h5hpname, h, harmind, applyVmods=applyVmods)
 
 def mCp_liafVIRdT(segd, fild, lfV, liaI, R, dT, h5path, h5expname, h5hpname):
     h=fild[lfV[1]]['harmonic']
     harmind=h-1
-    return mCp_gen(segd, fild, lfV, liaI, R, dT, h5path, h5expname, h5hpname, h, harmind, Vsrcisfiltered=True)
+    if 'applyVmods' in fild[lfV[1]] and isinstance(fild[lfV[1]]['applyVmods'], bool):
+        applyVmods=fild[lfV[1]]['applyVmods']
+    else:
+        applyVmods=False
+    return mCp_gen(segd, fild, lfV, liaI, R, dT, h5path, h5expname, h5hpname, h, harmind, applyVmods=applyVmods)
 
 def mCp_fftVIRdT1(segd, fild, fftV, fftI, R, dT, h5path, h5expname, h5hpname):
     return mCp_fftVIRdT(segd, fild, fftV, fftI, R, dT, h5path, h5expname, h5hpname)
@@ -2047,14 +2071,14 @@ def mCp_liafVIRdT3(segd, fild, lfV, liaI, R, dT, h5path, h5expname, h5hpname):
 def mCp_liafVIRdT4(segd, fild, lfV, liaI, R, dT, h5path, h5expname, h5hpname):
     return mCp_liafVIRdT(segd, fild, lfV, liaI, R, dT, h5path, h5expname, h5hpname)
 
-def mCp_gen(segd, fild, acV, acI, R, dT, h5path, h5expname, h5hpname, h, harmind, harm01inds=None, Vsrcisfiltered=False):#the I, dIdt, etc. should be tuples with a key for segd and then a key for fild
+def mCp_gen(segd, fild, acV, acI, R, dT, h5path, h5expname, h5hpname, h, harmind, harm01inds=None, applyVmods=False):#the I, dIdt, etc. should be tuples with a key for segd and then a key for fild
     RoToAl=RoToAl_h5(h5path, h5expname, h5hpname)
     ppc=pts_sincycle_h5(h5path, h5expname, h5hpname)
     dt=dt_h5(h5path, h5expname, h5hpname)
     freq1w=1./(ppc*dt)
     if h<2:
         print 'not supported - you are about to get an error of P being undefined'
-        return D_PS(segd, fild, R, dT, h5path=h5path, h5expname=h5expname, h5hpname=h5hpname)
+        #return D_PS(segd, fild, P, dT, h5path=h5path, h5expname=h5expname, h5hpname=h5hpname)
     elif h==2:
         mCpfcn=mCp_2w
     elif h==3:
@@ -2096,9 +2120,10 @@ def mCp_gen(segd, fild, acV, acI, R, dT, h5path, h5expname, h5hpname, h, harmind
     #mCpargdict['P']=P_
     mCpargdict['dT']=dT_
     mCpargdict['R']=R_
+    mCpargdict['Ro']=RoToAl[0]
     mCpargdict['tcr']=RoToAl[2]
     mCpargdict['freq1w']=freq1w
-    mCpargdict['Vsrcisfiltered']=Vsrcisfiltered
+    mCpargdict['applyVmods']=applyVmods
     return mCpfcn(**dict([(k, v) for k, v in mCpargdict.iteritems() if k in mCpfcn.func_code.co_varnames[:mCpfcn.func_code.co_argcount]]))
 
 

@@ -297,6 +297,8 @@ def saveSCcalculations(h5path, h5expname, h5hpname, hpsegdlist, recname):
             del h5g[k]
         ds=h5g.create_dataset(k, data=savearr)
         ds.attrs['recipe']=recname
+        ds.attrs['epoch']=time.time()
+        ds.attrs['savetime']=time.asctime()
         
     #now save fit results    
     savekeys=set([k for d in hpsegdlist for k in d.keys() if k.startswith('FITPARS_') and k in recsavekeys and not ('~' in k or k in h5hp[h5hpname] or k=='cycletime') and isinstance(d[k], numpy.ndarray)])
@@ -311,6 +313,8 @@ def saveSCcalculations(h5path, h5expname, h5hpname, hpsegdlist, recname):
                     del h5fg[`n`]
                 ds=h5fg.create_dataset(`n`, data=d[k])
                 ds.attrs['recipe']=recname
+                ds.attrs['epoch']=time.time()
+                ds.attrs['savetime']=time.asctime()
     
     #now save profile analysis
     savekeys=set([k for d in hpsegdlist for k in d.keys() if k.startswith('PROFILEANALYSIS_') and k in recsavekeys and not ('~' in k or k in h5hp[h5hpname] or k=='cycletime') and isinstance(d[k], dict)])
@@ -331,6 +335,8 @@ def saveSCcalculations(h5path, h5expname, h5hpname, hpsegdlist, recname):
                             del h5pac[arrk]
                         ds=h5pac.create_dataset(arrk, data=arr)
                         ds.attrs['recipe']=recname
+                        ds.attrs['epoch']=time.time()
+                        ds.attrs['savetime']=time.asctime()
                 
     h5file.close()
 def getfitdictlist_hp(h5path, h5expname, h5hpname):
