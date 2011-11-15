@@ -122,6 +122,8 @@ class MainMenu(QMainWindow):
         self.action_createh5=MainMenuQAction(self,'action_createh5', 'new h5 file', self.menufileio, [], self.ActionDict)
         self.action_createexpgrp=MainMenuQAction(self,'action_createexpgrp', 'new experiment group', self.menufileio, [('h5open', [True])], self.ActionDict)
         self.action_delh5grp=MainMenuQAction(self,'action_delh5grp', 'DELETE selected group', self.menufileio, [('h5open', [True]), ('selectiontype', ['Group'])], self.ActionDict)
+        self.action_deldataset=MainMenuQAction(self,'action_deldataset', 'DELETE dataset', self.menufileio, [('h5open', [True]), ('selectiontype', ['Dataset'])], self.ActionDict)
+        self.action_copydataset=MainMenuQAction(self,'action_copydataset', 'Copy (and rename) dataset', self.menufileio, [('h5open', [True]), ('selectiontype', ['Dataset'])], self.ActionDict)
         #self.action_delexpgrp=MainMenuQAction(self,'action_delexpgrp', 'DELETE experiment group', self.menufileio, [('h5open', [True])], self.ActionDict)
         self.action_editattrs=MainMenuQAction(self,'action_editattrs', 'Edit import attrs (select a heat program)', self.menufileio, [('h5open', [True]), ('selectiongrouptype', ['heatprogram'])], self.ActionDict)
         
@@ -335,12 +337,52 @@ class MainMenu(QMainWindow):
     def on_action_editattrs_triggered(self):
         path=self.geth5selectionpath(liststyle=False)
         editattrs(self, self.h5path, path)
-
+    
     @pyqtSignature("")
-    def on_action_delh5grp_triggered(self):
+    def on_action_copydataset_triggered(self):
+        nam=self.geth5selectionpath(liststyle=True)[-1]
+        idialog=lineeditDialog(self, title='Select new dataset name', deftext=nam)
+        if not idialog.exec_():
+            return
+        newnam=idialog.text
+        
+        h5file=h5py.File(self.h5path, mode='r+')
+        srcds=h5file[self.geth5selectionpath(liststyle=False)]
+        g=srcds.parent
+        if newnam in g:
+            h5file.close()
+            QMessageBox.warning(self,"Aborting",  "entered name already exists")
+            return
+        newds=g.create_dataset(newnam, data=readh5pyarray(srcds))
+        for k, v in srcds.attrs.items():
+            newds.attrs[k]=v
+        h5file.close()
+        h5file=h5py.File(self.h5path, mode='r')
+        fillh5tree(self.treeWidget, h5file, hpsortattr=str(self.sortattrLineEdit.text()))
+        h5file.close()
+    
+    @pyqtSignature("")
+    def on_action_deldataset_triggered(self):
+        idialog=messageDialog(self, "Continue with DELETE? there's no 'undo'")
+        if not idialog.exec_():
+            return
         h5file=h5py.File(self.h5path, mode='r+')
         del h5file[self.geth5selectionpath(liststyle=False)]
         h5file.close()
+        print 'DELETED:', self.geth5selectionpath(liststyle=False)
+        h5file=h5py.File(self.h5path, mode='r')
+        fillh5tree(self.treeWidget, h5file, hpsortattr=str(self.sortattrLineEdit.text()))
+        h5file.close()
+        
+    @pyqtSignature("")
+    def on_action_delh5grp_triggered(self):
+        idialog=messageDialog(self, "Continue with DELETE? there's no 'undo'")
+        if not idialog.exec_():
+            return
+        h5file=h5py.File(self.h5path, mode='r+')
+        del h5file[self.geth5selectionpath(liststyle=False)]
+        h5file.close()
+        print 'DELETED:', self.geth5selectionpath(liststyle=False)
         h5file=h5py.File(self.h5path, mode='r')
         fillh5tree(self.treeWidget, h5file, hpsortattr=str(self.sortattrLineEdit.text()))
         h5file.close()
