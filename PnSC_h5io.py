@@ -458,6 +458,8 @@ def RoToAl_h5(h5path, h5expname, h5hpname):#get from the array for the experimen
         restempal[0]=h5hp.attrs['Ro']
         if 'ambient_tempC' in h5hp.attrs:
             restempal[1]=h5hp.attrs['ambient_tempC']
+    if 'tcr' in h5hp.attrs.keys():
+        restempal[2]=h5hp.attrs['tcr']
     h5file.close()
     return restempal[0], restempal[1], restempal[2]
 

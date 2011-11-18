@@ -2011,7 +2011,7 @@ def mCp_fftfVIRdT(segd, fild, ffV, fftI, R, dT, h5path, h5expname, h5hpname):
     h=fild[ffV[1]]['harmonic']
     harmind=h*3
     harm01inds=[0, 3]
-    if 'applyVmods' in fild[ffV[1]] and isinstance(ffV[lfV[1]]['applyVmods'], bool):
+    if 'applyVmods' in fild[ffV[1]] and isinstance(fild[ffV[1]]['applyVmods'], bool):
         applyVmods=fild[ffV[1]]['applyVmods']
     else:
         applyVmods=False

@@ -47,6 +47,8 @@ def interpwithinarr(existind, existy, order=3, interpplotax=None, interpcols=['k
     return yfull
     
 def savgolsmooth(x, nptsoneside=7, order = 4, dx=1.0, deriv=0, binprior=0): #based on scipy cookbook. x is 1-d array, window is the number of points used to smooth the data, order is the order of the smoothing polynomial, will return the smoothed "deriv"th derivative of x
+    if nptsoneside<=1:
+        return x
     if binprior>1:
         origlen=len(x)
         x=numpy.array([x[i*binprior:(i+1)*binprior].mean() for i in range(origlen//binprior)])
@@ -784,7 +786,7 @@ def mCp_2w(VhX, VhY, I0X, I0Y, I1X, I1Y, IhX, IhY, dT, R, Ro, tcr, freq1w, apply
     else:
         return mc
     
-def mCp_3w(VhX, VhY, I0X, I0Y, I1X, I1Y, IhX, IhY, dT, R, tcr, freq1w, applyVmods=True, returnall=False):
+def mCp_3w(VhX, VhY, I0X, I0Y, I1X, I1Y, IhX, IhY, dT, R, Ro, tcr, freq1w, applyVmods=True, returnall=False):
     V3=VhX+1j*VhY
     I1=I1X+1j*I1Y
     angfreq1w=2.*numpy.pi*freq1w

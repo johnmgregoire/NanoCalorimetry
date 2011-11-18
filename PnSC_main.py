@@ -1,3 +1,4 @@
+# 17 Nov 2011
 import time
 import os
 import sys
@@ -912,10 +913,6 @@ class MainMenuQAction(QAction):
 def start(previousmm=None):
     mainapp=QApplication(sys.argv)
 
-    #TW=TreeWindow()
-    #TW.show()
-
-    #form=MainMenu(TW.treeWidget)
     form=MainMenu(previousmm)
     form.show()
     form.setFocus()

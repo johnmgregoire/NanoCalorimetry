@@ -3,33 +3,21 @@ import h5py,numpy, os, operator, pylab, time
 p='F:/CHESS2011_h5MAIN'
 px='F:/CHESS2011XRD_asimported'
 
-fnxrd_fnpnsc=[
-#('2011Jun01B.dat.h5','2011Jun01b_AuSiCu.h5',['AuSiCuheat1','AuSiCuheat2','AuSiCuheat3','AuSiCuheat4']),\
-#('2011Jun01B.dat.h5','2011Jun01b_NiTiHf.h5',['NiTiHfheat1','NiTiHfheat1_MA','NiTiHfheat1_fast','NiTiHfheat1_slow','NiTiHfheat2','NiTiHfheat2_MA']),\
-#('2011Jun01A_ZrCuAl_heat0.dat.h5', '2011Jun01a.h5', ['ZrCuAlheat1', 'ZrCuAlheat2', 'ZrCuAlheat3', 'ZrCuAlheat4', 'ZrCuAlheat5']), \
-#('2011Jun01B.dat.h5', '2011Jun01b.h5'), \
-#('2011Oct02D_AuSiCu.dat.h5', '2011Oct02D_AuSiCu.h5', ['AuSiCuheats']), \
-#('2011Oct02D_InSnBi.dat.h5', '2011Oct02D_BiInSn.h5', ['Bi_DCheats', 'Bi_ACheats', 'In_DCheats', 'In_ACheats', 'Sn_DCheats', 'Sn_ACheats']), \
-#('2011Oct10B.dat.h5', '2011Oct10B_NiTiHf.h5', ['NiTiHfheat1', 'NiTiHfheat2', 'NiTiHfheat3', 'NiTiHfheat1_MA', 'NiTiHfheat2_MA', 'NiTiHfheat3_MA']), \
-#('2011Oct10B_FeNi.dat.h5', '2011Oct10B_FeNi.h5', ['DCheats', 'ACheats']), \
-#('2011Oct10C.dat.h5', '2011Oct10C.h5', ['borides']), \
-#('2011Oct10D_NiTiHf.dat.h5', '2011Oct10D.h5', ['DCheats', 'ACheats']), \
-#('BackgroundImages.dat.h5', serp), \
-#('nosampleconfigurations.dat.h5', serp), \
-]
-
 savebool=1
 predeleteattrs=1
 x=[]
 y=[]
-for fnx, fn, expgrplist in fnxrd_fnpnsc:
-    if not fn.endswith('.h5'):
+
+for fnx in os.path.listdir(px):
+    if not fnx.endswith('.h5'):
         continue
-    f=h5py.File(os.path.join(p, fn), mode='r+')
-    hppnt_epoch=[]
-    #for node in f['Calorimetry'].values():
-    for expgrp in expgrplist:
-        node=f['Calorimetry'][expgrp]
+    pxr=os.path.join(px, fnx)
+    f=h5py.File(pxr, mode='r+')
+    for node in f['Calorimetry'].values():
+        if 'Ro' in node.name:
+            continue
+        
+        node=[expgrp]
 #        for nn in node.values():
 #            print nn, 'samplecurrent' in nn
 #            if 'samplecurrent' in nn:
